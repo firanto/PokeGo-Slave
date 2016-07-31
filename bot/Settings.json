@@ -1,0 +1,19 @@
+{
+    "username": "username",
+    "password": "password",
+    "provider": "google",
+    "centerType": "coords",
+    "centerName": "",
+    "centerLatitude": 0,
+    "centerLongitude": 0,
+    "centerAltitude": 0,
+    "radius": 70,
+    "loopInterval": 2000,
+    "step": 5,
+    "ball": 1,
+    "movement": "random",
+    "collect": true,
+    "encounter": true,
+    "target": "all",
+    "specificTargets": ["doduo", "rattata"]
+}

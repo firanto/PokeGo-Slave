@@ -1,0 +1,28 @@
+{
+  "name": "PokeGoScanner.Express",
+  "version": "0.0.0",
+  "private": true,
+  "scripts": {
+    "start": "node ./bin/www"
+  },
+  "dependencies": {
+    "bignum": "^0.12.5",
+    "bluebird": "^3.4.1",
+    "body-parser": "~1.13.1",
+    "cookie-parser": "~1.3.5",
+    "dateformat": "^1.0.12",
+    "debug": "~2.2.0",
+    "ejs": "~2.3.2",
+    "express": "~4.13.0",
+    "express-session": "^1.14.0",
+    "geolib": "^2.0.21",
+    "log4js": "^0.6.38",
+    "minimatch": "^3.0.2",
+    "mongo-connect": "0.0.6",
+    "morgan": "~1.6.1",
+    "pokemon-go-node-api": "^1.4.0",
+    "rand-token": "^0.2.1",
+    "serve-favicon": "~2.3.0",
+    "socket.io": "^1.4.8"
+  }
+}

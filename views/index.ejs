@@ -1,0 +1,548 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>
+        PokeGo Slave
+    </title>
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <link rel='stylesheet' href='/stylesheets/style.css' />
+    <script src='//ajax.googleapis.com/ajax/libs/jquery/1.12.4/jquery.min.js'></script>
+    <link rel='stylesheet' href='//cdn.materialdesignicons.com/1.6.50/css/materialdesignicons.min.css'/>
+    <link rel='stylesheet' href='//maxcdn.bootstrapcdn.com/bootstrap/3.3.6/css/bootstrap.min.css' integrity='sha384-1q8mTJOASx8j1Au+a5WDVnPi2lkFfwwEAa8hDDdjZlpLegxhjVME1fgjWPGmkzs7' crossorigin='anonymous'/>
+    <link rel='stylesheet' href='//maxcdn.bootstrapcdn.com/bootstrap/3.3.6/css/bootstrap-theme.min.css' integrity='sha384-fLW2N01lMqjakBkx3l/M9EahuwpSfeNvV63J5ezn3uZzapT0u7EYsXMjQV+0En5r' crossorigin='anonymous'/>
+    <script src='//maxcdn.bootstrapcdn.com/bootstrap/3.3.6/js/bootstrap.min.js' integrity='sha384-0mSbJDEHialfmuBBQP6A4Qrprq5OVfW37PRR3j5ELqxss1yVqOtnepnHVP9aJ7xS' crossorigin='anonymous'></script>
+    <!-- please append your own key to this google maps api -->
+    <!-- api key: AIzaSyCb0On0hKftgysntiZpWFGaKEibox-7Ev4 -->
+    <script src='//maps.googleapis.com/maps/api/js'></script>
+    <script src="//cdn.socket.io/socket.io-1.4.5.js"></script>
+    <script type='text/javascript' src='//cdnjs.cloudflare.com/ajax/libs/knockout/3.4.0/knockout-min.js'></script>
+    <style>
+        #google-map {
+            width: calc(100% - 300px);
+            height: calc(100% - 170px);
+            top: 50px;
+            left: 0px;
+            bottom: 120px;
+            position: absolute;
+            padding: 0px;
+            background-color: #eee;
+        }
+        #storage-panel {
+            width: 300px;
+            height: calc(100% - 170px);
+            top: 50px;
+            right: 0px;
+            bottom: 120px;
+            position: absolute;
+            padding: 0px;
+            background-color: #fff;
+            border-left: 1px solid #444;
+        }
+        #storage-panel-tab {
+            width: 140px;
+            height: 20px;
+            padding: 0px 10px 0px 10px;
+            text-align: center;
+            color: #fff;
+            background-color: #444;
+            border-radius: 0px 0px 5px 0px;
+        }
+        #storage-panel-content {
+            height: calc(100% - 20px);
+            padding: 10px 10px 10px 10px;
+            color: #444;
+            background-color: #fff;
+        }
+
+        #captives {
+            top: 155px;
+            width: calc(100% - 20px);
+            bottom: 0px;
+            position: absolute;
+            overflow-y: scroll;
+        }
+
+        #collected-modal ul {
+            list-style-type: none;
+            width: 100%;
+            margin: 0px;
+            padding: 0px;
+        }
+        #collected-modal ul li {
+            width: 100%;
+            height: 30px;
+            margin: 0px;
+            padding: 0px;
+            text-align: left;
+        }
+        .collected-item {
+            width: 100%;
+            height: 40px;
+            padding-left: 6px;
+            padding-right: 6px;
+        }
+
+        #nearby-panel-tab {
+            width: 140px;
+            height: 20px;
+            left: 0px;
+            bottom: 120px;
+            position: absolute;
+            padding: 0px 10px 0px 10px;
+            text-align: center;
+            color: #fff;
+            background-color: #444;
+            border-radius: 0px 5px 0px 0px;
+        }
+        #nearby-panel {
+            width: 100%;
+            height: 120px;
+            left: 0px;
+            bottom: 0px;
+            position: absolute;
+            color: #444;
+            background-color: #fff;
+            border-top: 1px solid #444;
+            text-align: center;
+            overflow-x: auto;
+            overflow-y: hidden;
+        }
+        #nearby-panel ul {
+            list-style-type: none;
+            width: 99999px;
+            margin: 0px;
+            padding: 0px;
+        }
+        #nearby-panel li {
+            float: left;
+        }
+        .nearby-item {
+            width: 120px;
+            height: 100%;
+            margin-top: 10px;
+            margin-left: 6px;
+            margin-right: 6px;
+            text-align: center;
+        }
+        .nearby-item > div {
+            width: 120px;
+            height: 20px;
+        }
+        .nearby-item > img {
+            width: 60px;
+            height: 60px;
+        }
+    </style>
+</head>
+
+<body>
+    <nav class="navbar navbar-inverse navbar-fixed-top">
+        <div class="container-fluid">
+            <div class="navbar-header">
+                <a class="navbar-brand">
+                    <img alt="Brand" src="images/brand-logo.png" style="margin-top:-10px; float: left;"/>
+                    <span>PokeGo Slave - </span>
+                    <span data-bind="text: trainerName"></span>,
+                    <span data-bind="text: teamName"></span>
+                </a>
+            </div>
+        </div>
+    </nav>
+
+    <!-- map -->
+    <div id="google-map"></div>
+
+    <!-- storage/inventory -->
+    <div id="storage-panel">
+        <div id="storage-panel-tab">Trainers Inventory</div>
+        <div id="storage-panel-content">
+            <table class="table table-condensed">
+                <tbody class="table-bordered">
+                    <tr><td width="70">PokeCoin</td><td width="10">:</td><td data-bind="text: pokeCoin"></td></tr>
+                    <tr><td>Stardust</td><td>:</td><td data-bind="text: stardust"></td></tr>
+                </tbody>
+            </table>
+
+            <!-- Nav tabs -->
+            <ul class="nav nav-tabs" role="tablist">
+                <li role="presentation" class="active"><a href="#captives" aria-controls="captives" role="tab" data-toggle="tab">Captives</a></li>
+                <li role="presentation"><a href="#pokemons" aria-controls="pokemons" role="tab" data-toggle="tab">Pokemons</a></li>
+                <li role="presentation"><a href="#items" aria-controls="items" role="tab" data-toggle="tab">Items</a></li>
+            </ul>
+
+            <!-- Tab panes -->
+            <div class="tab-content">
+                <div role="tabpanel" class="tab-pane fade in active" id="captives">
+                    <table class="table table-condensed table-striped">
+                        <tbody class="table-bordered" data-bind="foreach: captivePokemons">
+                            <tr>
+                                <td width="50" height="50"><img data-bind="attr: { src: data.img, width: 40, height: 40 }" /></td>
+                                <td>
+                                    <div style="width:100%;"><span data-bind="text: data.name"></span></div>
+                                    <div style="width:100%;"><span>Captured: </span><span data-bind="text: count"></span></div>
+                                </td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+                <div role="tabpanel" class="tab-pane fade" id="pokemons">
+                </div>
+                <div role="tabpanel" class="tab-pane fade" id="items">
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- nearby pokemons -->
+    <div id="nearby-panel-tab">Nearby Pokemons</div>
+    <div id="nearby-panel">
+        <ul data-bind="foreach: nearbyPokemons">
+            <li>
+                <div class="nearby-item">
+                    <div><span data-bind="text: data.name"></span></div>
+                    <img data-bind="attr: { src: data.img }" />
+                    <div><span data-bind="text: DistanceMeters"></span>m++</div>
+                </div>
+            </li>
+        </ul>
+    </div>
+
+    <div id="collected-modal" class="modal fade" tabindex="-1" role="dialog" aria-labelledby="mySmallModalLabel">
+        <div class="modal-dialog modal-sm">
+            <div class="modal-content nearby-item" style="padding-top: 20px; padding-bottom: 20px;width: 200px;">
+                <div style="height: 30px; line-height: 30px;"><span>Collected Items:</span></div>
+                <ul data-bind="foreach: lastCollectedItems">
+                    <li>
+                        <div class="collected-item" style="width:100%;">
+                            <span data-bind="text: item_name"></span>
+                        </div>
+                    </li>
+                </ul>
+            </div>
+        </div>
+    </div>
+
+    <div id="captured-modal" class="modal fade" tabindex="-1" role="dialog" aria-labelledby="mySmallModalLabel">
+        <div class="modal-dialog modal-sm">
+            <div class="modal-content text-center nearby-item" style="padding-top: 20px; padding-bottom: 20px;width: 200px;">
+                    <div class="text-center" style="width:100%;"><span>Captured </span><span data-bind="text: latestCaptiveName"></span></div>
+                    <img data-bind="attr: { src: latestCaptiveImage }" />
+            </div>
+        </div>
+    </div>
+
+    <div id="progress-modal" class="modal fade" tabindex="-1" role="dialog" aria-labelledby="mySmallModalLabel">
+        <div class="modal-dialog modal-sm">
+            <div class="modal-content text-center" style="padding-top: 20px; padding-bottom: 20px;">
+                <img src="images/spinner.gif" style="width: 60px; height: 60px;"/><br/>
+                <span style="font-size: 18px;">Please wait...</span>
+            </div>
+        </div>
+    </div>
+
+<script>
+    // global variables
+    var token = '<%=token;%>';
+    var socket = null;
+    var map = null;
+    var deployedBarriers = [];
+    var playerMarker = null;
+    var destinationMarker = null;
+    var capturedMarker = null;
+    var pokeStops = [];
+    var gyms = [];
+    var plottedPokemons = [];
+
+    // observable objects for knockout binding
+    var bindedData = {
+        trainerName: ko.observable(''),
+        teamName: ko.observable(''),
+        pokeCoin: ko.observable(0),
+        stardust: ko.observable(0),
+        latestCaptiveName: ko.observable(''),
+        latestCaptiveImage: ko.observable(''),
+        lastCollectedItems: ko.observableArray(),
+        captivePokemons: ko.observableArray(),
+        nearbyPokemons: ko.observableArray()
+    }
+
+    // init socket io
+    function initSocket() {
+        socket = io.connect('//localhost:3100');
+
+        // on deploy barriers
+        socket.on('barriers', function (data) {
+            deployBarriers(data.barriers);
+            deployedBarriers = data.barriers;
+        });
+
+        // on update player
+        socket.on('character', function (data) {
+            bindedData.trainerName(data.character.username);
+            bindedData.teamName(data.character.team);
+            bindedData.pokeCoin(data.character.pokeCoin);
+            bindedData.stardust(data.character.stardust);
+            setPlayerLocation(data.character.location.latitude, data.character.location.longitude);
+
+            // update captive data
+            bindedData.captivePokemons.removeAll();
+            data.character.captives.forEach((pokemon) => {
+                bindedData.captivePokemons.push(pokemon);
+            });
+        });
+
+        // on setting new destination
+        socket.on('destination', function (data) {
+            plotDestination(data.destination);
+        });
+
+        // on collect items
+        socket.on('collected', function (data) {
+            // do something to data.items (each item contain item_id)
+            alertCollectedItems(data.items);
+        });
+
+        // on captured pokemon
+        socket.on('captured', function (data) {
+            bindedData.latestCaptiveName(data.pokemon.data.name);
+            bindedData.latestCaptiveImage(data.pokemon.data.img);
+            plotCapturedPokemon(data.pokemon);
+        });
+
+        // on heartbeat
+        socket.on('heartbeat', function (data) {
+            // clear pokemons
+            plottedPokemons.forEach((pokemon) => {
+                pokemon.marker.setMap(null);
+            });
+            plottedPokemons = [];
+
+            // move character location
+            setPlayerLocation(data.heartbeat.location.latitude, data.heartbeat.location.longitude);
+
+            // show pokestops
+            data.heartbeat.pokeStops.forEach((pokeStop) => {
+                plotPokeStop(pokeStop);
+            });
+
+            // show gyms
+            data.heartbeat.gyms.forEach((gym) => {
+                plotGym(gym);
+            });
+
+            // show map pokemons on the map
+            // data.heartbeat.mapPokemons.forEach((pokemon) => {
+            //     plotMapPokemon(pokemon);
+            //     plottedPokemons.push(pokemon);
+            // });
+
+            // show wild pokemons on the map
+            data.heartbeat.wildPokemons.forEach((pokemon) => {
+                plotWildPokemon(pokemon);
+                plottedPokemons.push(pokemon);
+            });
+
+            // update nearby pokemons
+            bindedData.nearbyPokemons.removeAll();
+            data.heartbeat.nearbyPokemons.forEach((pokemon) => {
+                bindedData.nearbyPokemons.push(pokemon);
+            });
+        });
+    }
+
+    // map functions
+    function initMap() {
+        map = new google.maps.Map(document.getElementById('google-map'), {
+            center: { lat: <%=character.location.latitude;%>, lng: <%=character.location.longitude;%> },
+            zoom: 18
+        });
+        
+        playerMarker = new google.maps.Marker({
+            position: map.center,
+            icon: 'images/person-40.png',
+            map: map
+        });
+    }
+
+    function deployBarriers(barriers) {
+        // remove old barriers
+        deployedBarriers.forEach((deployed) => {
+            deployed.marker.setMap(null);
+        });
+
+        barriers.forEach((barrier) => {
+            barrier.marker = new google.maps.Marker({
+                position: { lat: barrier.latitude, lng: barrier.longitude },
+                icon: 'images/barrier-40.png',
+                map: map
+            });
+        });
+    }
+
+    function setPlayerLocation(latitude, longitude) {
+        if (playerMarker && map) {
+            playerMarker.setPosition({ lat: latitude, lng: longitude });
+            map.setCenter(playerMarker.position);
+        }
+    }
+
+    function plotPokeStop(pokeStop) {
+        var icon = null;
+        if (pokeStop.LureInfo) {
+            icon = pokeStop.Enabled ? 'images/pokestop-lure-40.png' : 'images/pokestop-lure-used-40.png';
+        }
+        else {
+            icon = pokeStop.Enabled ? 'images/pokestop-40.png' : 'images/pokestop-used-40.png';
+        }
+
+        // find pokeStop
+        var ps = pokeStops.find((ps) => {
+            return ps.FortId == pokeStop.FortId
+        });
+
+        // if not found, create one and insert it, else, replace
+        if (typeof(ps) == 'undefined') {
+            pokeStop.marker = new google.maps.Marker({
+                position: { lat: pokeStop.Latitude, lng: pokeStop.Longitude },
+                icon: icon,
+                map: map
+            });
+            pokeStops.push(pokeStop);
+        }
+        else {
+            pokeStop.marker = ps.marker;
+            pokeStop.marker.setIcon(icon);
+            var idx = pokeStops.indexOf(ps);
+            pokeStops[idx] = pokeStop;
+        }
+    }
+
+    function plotGym(gym) {
+        var icon = null;
+        switch (gym.Team) {
+            case 0:
+                icon = 'images/gym-80.png';
+                break;
+            case 1:
+                icon = 'images/gym-mystic-80.png';
+                break;
+            case 2:
+                icon = 'images/gym-valor-80.png';
+                break;
+            case 3:
+                icon = 'images/gym-instinct-80.png';
+                break;
+        }
+
+        // find gym
+        var gm = gyms.find((gm) => {
+            return gm.FortId == gym.FortId
+        });
+
+        // if not found, create one and insert it, else, replace
+        if (typeof(gm) == 'undefined') {
+            gym.marker = new google.maps.Marker({
+                position: { lat: gym.Latitude, lng: gym.Longitude },
+                icon: icon,
+                map: map
+            });
+            gyms.push(gym);
+        }
+        else {
+            gym.marker = gm.marker;
+            gym.marker.setIcon(icon);
+            var idx = gyms.indexOf(gm);
+            gyms[idx] = gym;
+        }
+    }
+
+    function plotMapPokemon(pokemon) {
+        pokemon.marker = new google.maps.Marker({
+            position: { lat: pokemon.Latitude, lng: pokemon.Longitude },
+            icon: {
+                url: pokemon.data.img,
+                scaledSize: new google.maps.Size(40, 40),
+                origin: new google.maps.Point(0,0),
+                anchor: new google.maps.Point(20,20)
+            },
+            map: map
+        });
+    }
+
+    function plotWildPokemon(pokemon) {
+        pokemon.marker = new google.maps.Marker({
+            position: { lat: pokemon.Latitude, lng: pokemon.Longitude },
+            icon: {
+                url: pokemon.data.img,
+                scaledSize: new google.maps.Size(40, 40),
+                origin: new google.maps.Point(0,0),
+                anchor: new google.maps.Point(20,20)
+            },
+            map: map
+        });
+    }
+
+    function plotCapturedPokemon(pokemon) {
+        pokemon.marker = new google.maps.Marker({
+            position: { lat: pokemon.Latitude, lng: pokemon.Longitude },
+            icon: 'images/pokeball-40.png',
+            map: map
+        });
+        $('#captured-modal').modal('show');
+        setTimeout(function(){
+            pokemon.marker.setMap(null);
+            pokemon.marker = null;
+            $('#captured-modal').modal('hide');
+        }, 3000);
+    }
+
+    function alertCollectedItems(items) {
+        bindedData.lastCollectedItems.removeAll();
+        items.forEach((item) => {
+            bindedData.lastCollectedItems.push(item);
+        });
+        $('#collected-modal').modal('show');
+        setTimeout(function(){
+            $('#collected-modal').modal('hide');
+        }, 3000);
+    }
+
+    function plotDestination(destination) {
+        if (!destination) {
+            destinationMarker.setMap(null);
+            destinationMarker = null;
+        }
+        else {
+            if (!destinationMarker) {
+                destinationMarker = new google.maps.Marker({
+                    position: { lat: destination.latitude, lng: destination.longitude },
+                    icon: 'images/flag-40.png',
+                    map: map
+                });
+            }
+            else {
+                destinationMarker.setPosition({ lat: destination.latitude, lng: destination.longitude });
+            }
+        }
+    }
+
+    $(document).ready(function() {
+        // initialize progress modal dialog
+        $('#collected-modal').modal({ backdrop: true, keyboard: true, show: false });
+        $('#captured-modal').modal({ backdrop: true, keyboard: true, show: false });
+        $('#progress-modal').modal({ backdrop: 'static', keyboard: false, show: false });
+
+        // init socket.io
+        initSocket();
+        
+        // init map
+        initMap();
+
+        // init knockout
+        ko.applyBindings(bindedData);
+    });
+</script>
+
+</body>
+
+</html>
