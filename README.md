@@ -30,8 +30,8 @@ Here are the settings' explanation:
 - centerLongitude : Your center's longitude.
 - centerAltitude : Your center's altitude. I usually just use 0.. :3
 - radius : Your operation radius. Your character will not walking outside of this circle.
-- loopInterval: Your operation interval in milliseconds. 2000 should be safe for now. Less than that, and they will throttle you.
-- step: Your character step distance in meter. Note that this is related with the loop interval. In the default value, this means 5 meter for 2 seconds (a.k.a 2.5m/s).
+- loopInterval: Your operation interval in milliseconds. 4000 should be safe for now. Less than that, I'm pretty sure they will throttle you.
+- step: Your character step distance in meter. Note that this is related with the loop interval. In the default value, this means 10 meter for 4 seconds (a.k.a 2.5m/s).
 - ball: Your ball to use. 1 = Pokeball, 2 = Great Ball, 3 = Ultra Ball, 4 = Master Ball.
 - movement: Your character movement. For now, it support "none", if you want your character standstill, and "random" for random destination walks.
 - collect: Define whether you want to collect items from PokeStop. true = collect, false = ignore the pokestop.
