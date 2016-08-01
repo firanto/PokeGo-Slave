@@ -7,19 +7,19 @@ I also use this to learn my understanding about automation process.
 Use it as you see fit. I do not held any responsibility of this project usage.
 
 # How to use
-Prerequisites:
-- Make sure you have Node.js and npm installed.
-- Also make sure you have node-gyp prerequisites installed. For information for your system, go here https://github.com/nodejs/node-gyp
-- Clone this project.
-- Navigate to it's root directory.
-- Run 'npm install' to install depencencies.
+## Prerequisites:
+1. Make sure you have Node.js and npm installed.
+2. Also make sure you have node-gyp prerequisites installed. For information for your system, go here https://github.com/nodejs/node-gyp
+3. Clone this project.
+4. Navigate to it's root directory.
+5. Run 'npm install' to install depencencies. Note that the api I use need s2geometry-node which has native codes. This can cause installation issue. Make sure to read point #2 and Additional information below.
 
-Usage:
-- Edit ./bot/Settings.json as you see fit. The guide are bellow this section. 
-- Run 'node /bin/www' to run the bot. You can navigate to 'http://localhost:3000/' to see the GUI report.
-- Or better yet, just run './start' on *nix platforms or 'start.bat' on Windows.
+## Usage:
+1. Edit ./bot/Settings.json as you see fit. The guide are bellow this section. 
+2. Run 'node /bin/www' to run the bot. You can navigate to 'http://localhost:3000/' to see the GUI report.
+3. Or better yet, just run './start' on *nix platforms or 'start.bat' on Windows.
 
-#Settings
+## Settings
 Here are the settings' explanation:
 - username : This is your username. Either PTC or Google account.
 - password : Your password. For Google account who activated multi-factor authentication, create app password. How? Ask Google.. :3
@@ -43,6 +43,31 @@ Here are the settings' explanation:
 
 That's it. :3
 
+#TODO:
+##Checklist
+- [X] Auto-walk using random coordinate to hatch eggs
+- [X] Catch Nearby Pokemon automatically
+- [X] Use Normal/Super/Great Pokeballs... (need a rework to cascade usages)
+- [X] Pokemon automatic transfer (user can limit number of possession. Pokemon with lowest CP will be transfered first)
+- [X] Display Avatar on map
+- [X] Display Avatar's destination on map
+- [X] Update Avatar position when walking
+- [X] Display pokestops on map. Including active lure and collected state (purple color)
+- [X] Display gyms on map
+- [X] Display catchable pokemon on map
+- [X] Pokemon catch filter. Can be 'all', 'except', or 'only'
+- [ ] Enable/disable auto-walk
+- [ ] Double click map to set trainer location.
+- [ ] Drop items when bag is full
+- [ ] Incubate eggs
+
+##Considered, but not primary target
+- [ ] Evolve pokemon
+- [ ] Use candy
+
 #Additional information
 Regarding s2geometry-node issue (specially in Windows), just make sure you have install the build tools at the link above. 
 If your still have error on building it, try update your npm with 'npm install -g npm@next' with Administrator credentials.
+
+#Dependency
+Thanks to [Arm4x](https://github.com/Armax) who provide the node's verison of pokemon go api which you can found [here](https://github.com/Armax/Pokemon-GO-node-api).
