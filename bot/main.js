@@ -13,7 +13,6 @@ const ItemList = JSON.parse(fs.readFileSync(__dirname + '/items.json', 'utf8'));
 var Settings = JSON.parse(fs.readFileSync(__dirname + '/settings.json', 'utf8'));
 
 log4js.configure({ appenders: [ { type: 'console' }, { type: 'file', filename: 'logs/log ' + dateFormat(new Date(), "yyyy-mm-dd h-MM-ss") + '.log', category: 'PokeGoSlave' } ]});
-log4js.configure({ appenders: [ { type: 'console' }, { type: 'file', filename: 'logs/captured pokemons ' + dateFormat(new Date(), "yyyy-mm-dd h-MM-ss") + '.log', category: 'PokeGoCaptured' } ]});
 
 // Extend Number object with method to convert radians to numeric (signed) degrees 
 if (Number.prototype.toDegrees === undefined) {
@@ -29,7 +28,6 @@ function numberWithCommas(x) {
 var PokeGoWorker = function () {
     var self = this;
     self.logger = log4js.getLogger('PokeGoSlave');
-    self.captiveLog = log4js.getLogger('PokeGoCaptured');
 
     // socket.io object
     self.io = null;
@@ -179,10 +177,12 @@ var PokeGoWorker = function () {
         inventories.inventory_delta.inventory_items.forEach((inventory) => {
             if (inventory.inventory_item_data.pokemon && !inventory.inventory_item_data.pokemon.is_egg) {
                 inventory.inventory_item_data.pokemon.data = PokemonList[inventory.inventory_item_data.pokemon.pokemon_id - 1];
+                inventory.inventory_item_data.pokemon.defending = inventory.inventory_item_data.pokemon.deployed_fort_id != null ? 'defending' : '';
                 self.character.pokemons.push(inventory.inventory_item_data.pokemon);
             }
             if (inventory.inventory_item_data.item) {
-                inventory.inventory_item_data.item.name = ItemList[inventory.inventory_item_data.item.item]; 
+                inventory.inventory_item_data.item.name = ItemList[inventory.inventory_item_data.item.item];
+                inventory.inventory_item_data.item.count = inventory.inventory_item_data.item.count != null ? inventory.inventory_item_data.item.count : 0; 
                 self.character.items.push(inventory.inventory_item_data.item);
             }
             if (inventory.inventory_item_data.player_stats) {
@@ -190,6 +190,8 @@ var PokeGoWorker = function () {
                 self.character.experience = inventory.inventory_item_data.player_stats.experience.low;
                 self.character.nextExperience = inventory.inventory_item_data.player_stats.next_level_xp.low;
                 self.character.kmWalked = inventory.inventory_item_data.player_stats.km_walked;
+            }
+            if (inventory.inventory_item_data.pokemon_family) {
             }
             count++;
         });
@@ -345,7 +347,7 @@ var PokeGoWorker = function () {
                                     else {
                                         pm.count = pm.count + 1;
                                     }
-                                    self.captiveLog.info('Captured ' + data.WildPokemon.data.name + ' at ' + data.WildPokemon.Latitude + ', ' + data.WildPokemon.Longitude + ', at ' + dateFormat(new Date(), "yyyy-mm-dd h-MM-ss"));
+                                    self.logger.info('Captured ' + data.WildPokemon.data.name + ' at ' + data.WildPokemon.Latitude + ', ' + data.WildPokemon.Longitude + ', at ' + dateFormat(new Date(), "yyyy-mm-dd h-MM-ss"));
                                     self.io.emit('captured', { pokemon: data.WildPokemon });
                                 }
                             }
