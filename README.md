@@ -56,9 +56,9 @@ That's it. :3
 - [X] Display gyms on map
 - [X] Display catchable pokemon on map
 - [X] Pokemon catch filter. Can be 'all', 'except', or 'only'
-- [ ] Enable/disable auto-walk
+- [ ] Enable/disable auto-walk from UI
 - [ ] Double click map to set trainer location.
-- [ ] Drop items when bag is full
+- [ ] Drop items when bag is full. I think this should be done manually from UI.
 - [ ] Incubate eggs
 
 ##Considered, but not primary target
