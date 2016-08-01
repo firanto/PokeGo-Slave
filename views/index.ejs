@@ -19,24 +19,41 @@
     <style>
         #google-map {
             width: calc(100% - 300px);
-            height: calc(100% - 170px);
+            height: calc(100% - 180px);
             top: 50px;
             left: 0px;
-            bottom: 120px;
+            bottom: 130px;
             position: absolute;
             padding: 0px;
             background-color: #eee;
+            transition:all 500ms ease-out 0.5s;
+        }
+        #storage-tab {
+            width: 40px;
+            height: 40px;
+            line-height: 40px;
+            right: 0px;
+            top: 50px;
+            position: absolute;
+            padding: 0px 10px 0px 10px;
+            text-align: center;
+            color: #fff;
+            background-color: #444;
+            border-radius: 0px 0px 0px 5px;
+            transition:all 500ms ease-out 0.5s;
+            opacity: 0;
         }
         #storage-panel {
             width: 300px;
-            height: calc(100% - 170px);
+            height: calc(100% - 180px);
             top: 50px;
             right: 0px;
-            bottom: 120px;
+            bottom: 130px;
             position: absolute;
             padding: 0px;
             background-color: #fff;
             border-left: 1px solid #444;
+            transition:all 500ms ease-out 0.5s;
         }
         #storage-panel-tab {
             width: 140px;
@@ -55,6 +72,20 @@
         }
 
         #captives {
+            top: 155px;
+            width: calc(100% - 20px);
+            bottom: 0px;
+            position: absolute;
+            overflow-y: scroll;
+        }
+        #pokemons {
+            top: 155px;
+            width: calc(100% - 20px);
+            bottom: 0px;
+            position: absolute;
+            overflow-y: scroll;
+        }
+        #items {
             top: 155px;
             width: calc(100% - 20px);
             bottom: 0px;
@@ -86,7 +117,7 @@
             width: 140px;
             height: 20px;
             left: 0px;
-            bottom: 120px;
+            bottom: 130px;
             position: absolute;
             padding: 0px 10px 0px 10px;
             text-align: center;
@@ -96,7 +127,7 @@
         }
         #nearby-panel {
             width: 100%;
-            height: 120px;
+            height: 130px;
             left: 0px;
             bottom: 0px;
             position: absolute;
@@ -142,8 +173,7 @@
                 <a class="navbar-brand">
                     <img alt="Brand" src="images/brand-logo.png" style="margin-top:-10px; float: left;"/>
                     <span>PokeGo Slave - </span>
-                    <span data-bind="text: trainerName"></span>,
-                    <span data-bind="text: teamName"></span>
+                    <span data-bind="text: trainerInfo"></span>
                 </a>
             </div>
         </div>
@@ -153,6 +183,7 @@
     <div id="google-map"></div>
 
     <!-- storage/inventory -->
+    <button id="storage-tab" class="btn">&lt;&lt;</button>
     <div id="storage-panel">
         <div id="storage-panel-tab">Trainers Inventory</div>
         <div id="storage-panel-content">
@@ -173,6 +204,7 @@
             <!-- Tab panes -->
             <div class="tab-content">
                 <div role="tabpanel" class="tab-pane fade in active" id="captives">
+                    <div style="height: 30px; line-height: 30px;">Captured Pokemons: <span data-bind="text: totalCaptured"></span></div>
                     <table class="table table-condensed table-striped">
                         <tbody class="table-bordered" data-bind="foreach: captivePokemons">
                             <tr>
@@ -186,8 +218,31 @@
                     </table>
                 </div>
                 <div role="tabpanel" class="tab-pane fade" id="pokemons">
+                    <div style="height: 30px; line-height: 30px;">Pokemons: <span data-bind="text: pokemons().length"></span>/<span data-bind="text: pokeStorage"></span></div>
+                    <table class="table table-condensed table-striped">
+                        <tbody class="table-bordered" data-bind="foreach: pokemons">
+                            <tr>
+                                <td width="50" height="50"><img data-bind="attr: { src: data.img, width: 40, height: 40 }" /></td>
+                                <td>
+                                    <div style="width:100%;"><span data-bind="text: data.name"></span></div>
+                                    <div style="width:100%;"><span>CP: </span><span data-bind="text: cp"></span></div>
+                                </td>
+                            </tr>
+                        </tbody>
+                    </table>
                 </div>
                 <div role="tabpanel" class="tab-pane fade" id="items">
+                    <div style="height: 30px; line-height: 30px;">Items: <span data-bind="text: totalItems"></span>/<span data-bind="text: itemStorage"></span></div>
+                    <table class="table table-condensed table-striped">
+                        <tbody class="table-bordered" data-bind="foreach: items">
+                            <tr>
+                                <td>
+                                    <div style="width:100%;"><span data-bind="text: name"></span></div>
+                                    <div style="width:100%;"><span>Count: </span><span data-bind="text: count"></span></div>
+                                </td>
+                            </tr>
+                        </tbody>
+                    </table>
                 </div>
             </div>
         </div>
@@ -235,7 +290,7 @@
         <div class="modal-dialog modal-sm">
             <div class="modal-content text-center" style="padding-top: 20px; padding-bottom: 20px;">
                 <img src="images/spinner.gif" style="width: 60px; height: 60px;"/><br/>
-                <span style="font-size: 18px;">Please wait...</span>
+                <span style="font-size: 18px;">Transfering pokemon...</span>
             </div>
         </div>
     </div>
@@ -243,6 +298,7 @@
 <script>
     // global variables
     var token = '<%=token;%>';
+    var storageOpened = false;
     var socket = null;
     var map = null;
     var deployedBarriers = [];
@@ -253,18 +309,36 @@
     var gyms = [];
     var plottedPokemons = [];
 
-    // observable objects for knockout binding
-    var bindedData = {
-        trainerName: ko.observable(''),
-        teamName: ko.observable(''),
-        pokeCoin: ko.observable(0),
-        stardust: ko.observable(0),
-        latestCaptiveName: ko.observable(''),
-        latestCaptiveImage: ko.observable(''),
-        lastCollectedItems: ko.observableArray(),
-        captivePokemons: ko.observableArray(),
-        nearbyPokemons: ko.observableArray()
+    function numberWithCommas(x) {
+        return x.toString().replace(/\B(?=(\d{3})+(?!\d))/g, ",");
     }
+
+    // observable objects for knockout binding
+    function BindedData() {
+        this.trainerName = ko.observable('');
+        this.trainerTeam = ko.observable('');
+        this.trainerLevel = ko.observable(0);
+        this.trainerExp = ko.observable(0);
+        this.trainerNextExp = ko.observable(0);
+        this.trainerInfo = ko.computed(function() {
+            return this.trainerName() + ', Lv.' + this.trainerLevel() + ', Team: ' + this.trainerTeam() +
+                ', Exp: ' + numberWithCommas(this.trainerExp()) + '/' + numberWithCommas(this.trainerNextExp());
+        }, this);
+        this.pokeCoin = ko.observable(0);
+        this.stardust = ko.observable(0);
+        this.pokeStorage = ko.observable(0);
+        this.itemStorage = ko.observable(0);
+        this.latestCaptiveName = ko.observable('');
+        this.latestCaptiveImage = ko.observable('');
+        this.totalCaptured = ko.observable(0);
+        this.lastCollectedItems = ko.observableArray();
+        this.nearbyPokemons = ko.observableArray();
+        this.captivePokemons = ko.observableArray();
+        this.pokemons = ko.observableArray();
+        this.items = ko.observableArray();
+        this.totalItems = ko.observable(0);
+    }
+    var bindedData = new BindedData();
 
     // init socket io
     function initSocket() {
@@ -279,16 +353,39 @@
         // on update player
         socket.on('character', function (data) {
             bindedData.trainerName(data.character.username);
-            bindedData.teamName(data.character.team);
+            bindedData.trainerTeam(data.character.team);
+            bindedData.trainerLevel(data.character.level);
+            bindedData.trainerExp(data.character.experience);
+            bindedData.trainerNextExp(data.character.nextExperience);
             bindedData.pokeCoin(data.character.pokeCoin);
             bindedData.stardust(data.character.stardust);
+            bindedData.pokeStorage(data.character.pokeStorage);
+            bindedData.itemStorage(data.character.itemStorage);
             setPlayerLocation(data.character.location.latitude, data.character.location.longitude);
 
             // update captive data
-            bindedData.captivePokemons.removeAll();
-            data.character.captives.forEach((pokemon) => {
-                bindedData.captivePokemons.push(pokemon);
+            var count = 0;
+            data.character.captives.forEach((captive) => {
+                count = count + captive.count;
             });
+            bindedData.totalCaptured(count);
+            bindedData.captivePokemons(data.character.captives);
+            bindedData.pokemons(data.character.pokemons);
+            count = 0;
+            data.character.items.forEach((item) => {
+                count = count + item.count;
+            });
+            bindedData.totalItems(count);
+            bindedData.items(data.character.items);
+        });
+
+        // on cleaning up pokemons
+        socket.on('cleaningPokemon', function () {
+            $('#progress-modal').modal('show');
+        });
+
+        socket.on('pokemonCleaned', function () {
+            $('#progress-modal').modal('hide');
         });
 
         // on setting new destination
@@ -343,10 +440,7 @@
             });
 
             // update nearby pokemons
-            bindedData.nearbyPokemons.removeAll();
-            data.heartbeat.nearbyPokemons.forEach((pokemon) => {
-                bindedData.nearbyPokemons.push(pokemon);
-            });
+            bindedData.nearbyPokemons(data.heartbeat.nearbyPokemons);
         });
     }
 
@@ -540,6 +634,21 @@
 
         // init knockout
         ko.applyBindings(bindedData);
+
+        // $('#storage-tab').click(() => {
+        //     if (storageOpened) {
+        //         storageOpened = false;
+        //         $('#storage-tab').css('right', '0px');
+        //         $('#storage-panel').css('right', '-300px');
+        //         $('#google-map').css('width', '100%');
+        //     }
+        //     else {
+        //         storageOpened = true;
+        //         $('#storage-tab').css('right', '300px');
+        //         $('#storage-panel').css('right', '0px');
+        //         $('#google-map').css('width', 'calc(100% - 300px)');
+        //     }
+        // });
     });
 </script>
 
