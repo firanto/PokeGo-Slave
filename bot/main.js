@@ -13,7 +13,6 @@ const ItemList = JSON.parse(fs.readFileSync(__dirname + '/items.json', 'utf8'));
 var Settings = JSON.parse(fs.readFileSync(__dirname + '/settings.json', 'utf8'));
 
 log4js.configure({ appenders: [ { type: 'console' }, { type: 'file', filename: 'logs/log ' + dateFormat(new Date(), "yyyy-mm-dd h-MM-ss") + '.log', category: 'PokeGoSlave' } ]});
-log4js.configure({ appenders: [ { type: 'console' }, { type: 'file', filename: 'logs/captured pokemons ' + dateFormat(new Date(), "yyyy-mm-dd h-MM-ss") + '.log', category: 'PokeGoCaptured' } ]});
 
 // Extend Number object with method to convert radians to numeric (signed) degrees 
 if (Number.prototype.toDegrees === undefined) {
@@ -29,7 +28,6 @@ function numberWithCommas(x) {
 var PokeGoWorker = function () {
     var self = this;
     self.logger = log4js.getLogger('PokeGoSlave');
-    self.captiveLog = log4js.getLogger('PokeGoCaptured');
 
     // socket.io object
     self.io = null;
@@ -164,11 +162,6 @@ var PokeGoWorker = function () {
             // do initial cleanup
             if (self.initialCleanup) {
                 self.initialCleanup = false;
-                self.started = false;
-                if (self.io) {
-                    self.io.emit('cleaningPokemon');
-                }
-                self.logger.info('[t] Transfering overcaptured pokemons...');
                 self.cleaningPokemon();
             }
         }).catch((err) => {
@@ -184,10 +177,12 @@ var PokeGoWorker = function () {
         inventories.inventory_delta.inventory_items.forEach((inventory) => {
             if (inventory.inventory_item_data.pokemon && !inventory.inventory_item_data.pokemon.is_egg) {
                 inventory.inventory_item_data.pokemon.data = PokemonList[inventory.inventory_item_data.pokemon.pokemon_id - 1];
+                inventory.inventory_item_data.pokemon.defending = inventory.inventory_item_data.pokemon.deployed_fort_id != null ? 'defending' : '';
                 self.character.pokemons.push(inventory.inventory_item_data.pokemon);
             }
             if (inventory.inventory_item_data.item) {
-                inventory.inventory_item_data.item.name = ItemList[inventory.inventory_item_data.item.item]; 
+                inventory.inventory_item_data.item.name = ItemList[inventory.inventory_item_data.item.item];
+                inventory.inventory_item_data.item.count = inventory.inventory_item_data.item.count != null ? inventory.inventory_item_data.item.count : 0; 
                 self.character.items.push(inventory.inventory_item_data.item);
             }
             if (inventory.inventory_item_data.player_stats) {
@@ -195,6 +190,8 @@ var PokeGoWorker = function () {
                 self.character.experience = inventory.inventory_item_data.player_stats.experience.low;
                 self.character.nextExperience = inventory.inventory_item_data.player_stats.next_level_xp.low;
                 self.character.kmWalked = inventory.inventory_item_data.player_stats.km_walked;
+            }
+            if (inventory.inventory_item_data.pokemon_family) {
             }
             count++;
         });
@@ -208,6 +205,11 @@ var PokeGoWorker = function () {
 
     self.cleaningPokemon = function () {
         if (Settings.autoCleanPokemon) {
+            self.started = false;
+            if (self.io) {
+                self.io.emit('cleaningPokemon');
+            }
+            self.logger.info('[t] Transfering overcaptured pokemons...');
             var groupedPokemons = [];
             // grouping pokemons
             self.character.pokemons.forEach((pokemon) => {
@@ -232,60 +234,59 @@ var PokeGoWorker = function () {
                 }
             });
 
-            var cleanupLoop = setInterval(function() {
-                return new Promise(function(resolve, reject) {
-                    if (self.transferingPokemons.length > 0) {
-                        Pokeio.TransferPokemonAsync(self.transferingPokemons[0].id).then((data) => {
-                            if (data.Status == 1) {
-                                self.logger.info('[t] Successfully transfering ' + self.transferingPokemons[0].data.name + '(CP: ' + self.transferingPokemons[0].cp + ')!');
+            if (self.transferingPokemons.length > 0) {
+                var cleanupLoop = setInterval(function() {
+                    return new Promise(function(resolve, reject) {
+                        if (self.transferingPokemons.length > 0) {
+                            Pokeio.TransferPokemonAsync(self.transferingPokemons[0].id).then((data) => {
+                                if (data.Status == 1) {
+                                    self.logger.info('[t] Successfully transfering ' + self.transferingPokemons[0].data.name + '(CP: ' + self.transferingPokemons[0].cp + ')!');
+                                }
+                                self.transferingPokemons.splice(0, 1);
+                                if (self.transferingPokemons.length == 0) {
+                                    self.logger.info('[t] Transfering finished!');
+                                    clearInterval(cleanupLoop);
+                                    self.started = true;
+                                    Pokeio.GetInventoryAsync().then((inventories) => {
+                                        self.formatInventory(inventories);
+
+                                        if (self.io) {
+                                            self.io.emit('pokemonCleaned');
+                                            self.io.emit('character', { character: self.character });
+                                        }
+                                        resolve();
+                                    }).catch((err) => {
+                                        console.log(err);
+                                        reject(err);
+                                    });
+                                }
+                                else {
+                                    resolve();
+                                }
+                            }).catch((err) => {
+                                console.log(err);
+                            });
+                        }
+                        else {
+                            clearInterval(cleanupLoop);
+                            self.started = true;
+                            if (self.io) {
+                                self.io.emit('pokemonCleaned');
                             }
-                            self.transferingPokemons.splice(0, 1);
-                            if (self.transferingPokemons.length == 0) {
-                                self.logger.info('[t] Transfering finished!');
-                                clearInterval(cleanupLoop);
-                                self.started = true;
-                                Pokeio.GetInventoryAsync().then((inventories) => {
-                                    self.formatInventory(inventories);
-
-                                    if (self.io) {
-                                        self.io.emit('pokemonCleaned');
-                                        self.io.emit('character', { character: self.character });
-                                    }
-                                }).catch((err) => {
-                                    console.log(err);
-                                    reject(err);
-                                });
-                            }
-                            resolve();
-                        }).catch((err) => {
-                            console.log(err);
-                        });
-                    }
-                }).then((a) => {
-                    return null;
-                });
-            }, Settings.loopInterval);
-
-
-            // self.doCleanup(self.transferingPokemons);
-        }
-    }
-
-    self.doCleanup = function(pokemons) {
-        if (pokemons.length > 0) {
-            Pokeio.TransferPokemonAsync(pokemons[0].id).then((data) => {
-                if (data.Status == 1) {
-                    self.logger.info('[t] Successfully transfering ' + pokemons[0].data.name + '(CP: ' + pokemons[0].cp + ')!');
+                            self.logger.info('[t] Transfering finished!');
+                        }
+                    }).then((a) => {
+                        return null;
+                    });
+                }, Settings.loopInterval);
+            }
+            else {
+                self.started = true;
+                if (self.io) {
+                    self.io.emit('pokemonCleaned');
                 }
-                pokemons.splice(0, 1);
-                if (pokemons.length > 0) {
-                    // self.doCleanup(pokemons);
-                }
-                else {
-                    self.logger.info('[t] Transfering finished!');
-                    self.started = true;
-                }
-            });
+                self.logger.info('[t] Transfering finished!');
+            }
         }
     }
 
@@ -322,37 +323,39 @@ var PokeGoWorker = function () {
                 }
                 // else, encounter successful. time to throwing balls... :3
                 else {
-                    Pokeio.CatchPokemonAsync(data.WildPokemon, 1, 1.950, 1, Settings.ball).then((final) => {
-                        // if data is 'No result', this means we get nothing from the server
-                        if (data == 'No result') {
-                            reject(new Error(data));
-                        }
-                        // else, catch request successful. parse the result
-                        var status = ['Unexpected error', 'Successful catch', 'Catch Escape', 'Catch Flee', 'Missed Catch'];
-                        if(final.Status == null) {
-                            self.logger.info('[x] Error: You have no more of that ball left to use!');
-                        } else {
-                            data.WildPokemon.data = PokemonList[data.WildPokemon.pokemon.PokemonId - 1];
-                            self.logger.info('[s] Catch status for ' + data.WildPokemon.data.name + ': ' + status[parseInt(final.Status)]);
-                            if (final.Status == 1) {
-                                var pm = self.character.captives.find((pm) => {
-                                    return pm.data.id == data.WildPokemon.data.id;
-                                });
-                                if (typeof(pm) == 'undefined') {
-                                    data.WildPokemon.count = 1;
-                                    self.character.captives.push(data.WildPokemon);
-                                }
-                                else {
-                                    pm.count = pm.count + 1;
-                                }
-                                self.captiveLog.info('Captured ' + data.WildPokemon.data.name + ' at ' + data.WildPokemon.Latitude + ', ' + data.WildPokemon.Longitude + ', at ' + dateFormat(new Date(), "yyyy-mm-dd h-MM-ss"));
-                                self.io.emit('captured', { pokemon: data.WildPokemon });
+                    setTimeout(() => {
+                        Pokeio.CatchPokemonAsync(data.WildPokemon, 1, 1.950, 1, Settings.ball).then((final) => {
+                            // if data is 'No result', this means we get nothing from the server
+                            if (data == 'No result') {
+                                reject(new Error(data));
                             }
-                        }
-                        resolve({ status: parseInt(final.Status), message: status[parseInt(final.Status)] });
-                    }).catch((err) => {
-                        reject(err);
-                    });
+                            // else, catch request successful. parse the result
+                            var status = ['Unexpected error', 'Successful catch', 'Catch Escape', 'Catch Flee', 'Missed Catch'];
+                            if(final.Status == null) {
+                                self.logger.info('[x] Error: You have no more of that ball left to use!');
+                            } else {
+                                data.WildPokemon.data = PokemonList[data.WildPokemon.pokemon.PokemonId - 1];
+                                self.logger.info('[s] Catch status for ' + data.WildPokemon.data.name + ': ' + status[parseInt(final.Status)]);
+                                if (final.Status == 1) {
+                                    var pm = self.character.captives.find((pm) => {
+                                        return pm.data.id == data.WildPokemon.data.id;
+                                    });
+                                    if (typeof(pm) == 'undefined') {
+                                        data.WildPokemon.count = 1;
+                                        self.character.captives.push(data.WildPokemon);
+                                    }
+                                    else {
+                                        pm.count = pm.count + 1;
+                                    }
+                                    self.logger.info('Captured ' + data.WildPokemon.data.name + ' at ' + data.WildPokemon.Latitude + ', ' + data.WildPokemon.Longitude + ', at ' + dateFormat(new Date(), "yyyy-mm-dd h-MM-ss"));
+                                    self.io.emit('captured', { pokemon: data.WildPokemon });
+                                }
+                            }
+                            resolve({ status: parseInt(final.Status), message: status[parseInt(final.Status)] });
+                        }).catch((err) => {
+                            reject(err);
+                        });
+                    }, 2000);
                 }
                 return null;
             }).catch((err) => {

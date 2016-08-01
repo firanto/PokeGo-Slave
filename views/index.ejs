@@ -211,7 +211,7 @@
                                 <td width="50" height="50"><img data-bind="attr: { src: data.img, width: 40, height: 40 }" /></td>
                                 <td>
                                     <div style="width:100%;"><span data-bind="text: data.name"></span></div>
-                                    <div style="width:100%;"><span>Captured: </span><span data-bind="text: count"></span></div>
+                                    <div style="width:100%;">Captured: <span data-bind="text: count"></span></div>
                                 </td>
                             </tr>
                         </tbody>
@@ -224,8 +224,10 @@
                             <tr>
                                 <td width="50" height="50"><img data-bind="attr: { src: data.img, width: 40, height: 40 }" /></td>
                                 <td>
-                                    <div style="width:100%;"><span data-bind="text: data.name"></span></div>
-                                    <div style="width:100%;"><span>CP: </span><span data-bind="text: cp"></span></div>
+                                    <div style="width:50%; float:left;"><span data-bind="text: data.name"></span></div>
+                                    <div style="width:50%; float:right;">HP: <span data-bind="text: stamina"></span>/<span data-bind="text: stamina_max"></span></div>
+                                    <div style="width:50%; float:left;">CP: <span data-bind="text: cp"></span></div>
+                                    <div style="width:50%; float:right;"><span data-bind="text: defending"></span></div>
                                 </td>
                             </tr>
                         </tbody>
@@ -320,9 +322,11 @@
         this.trainerLevel = ko.observable(0);
         this.trainerExp = ko.observable(0);
         this.trainerNextExp = ko.observable(0);
+        this.trainerKm = ko.observable(0);
         this.trainerInfo = ko.computed(function() {
             return this.trainerName() + ', Lv.' + this.trainerLevel() + ', Team: ' + this.trainerTeam() +
-                ', Exp: ' + numberWithCommas(this.trainerExp()) + '/' + numberWithCommas(this.trainerNextExp());
+                ', Exp: ' + numberWithCommas(this.trainerExp()) + '/' + numberWithCommas(this.trainerNextExp()) +
+                ', km walked: ' + numberWithCommas(this.trainerKm()) + 'km';
         }, this);
         this.pokeCoin = ko.observable(0);
         this.stardust = ko.observable(0);
@@ -357,6 +361,7 @@
             bindedData.trainerLevel(data.character.level);
             bindedData.trainerExp(data.character.experience);
             bindedData.trainerNextExp(data.character.nextExperience);
+            bindedData.trainerKm(Math.round(data.character.kmWalked * 100) / 100);
             bindedData.pokeCoin(data.character.pokeCoin);
             bindedData.stardust(data.character.stardust);
             bindedData.pokeStorage(data.character.pokeStorage);
