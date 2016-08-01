@@ -9,6 +9,8 @@
     "centerAltitude": 0,
     "radius": 80,
     "loopInterval": 4000,
+    "autoCleanPokemon": true,
+    "pokemonKeepNumber": 5,
     "step": 10,
     "ball": 1,
     "movement": "random",

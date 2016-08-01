@@ -290,7 +290,7 @@
         <div class="modal-dialog modal-sm">
             <div class="modal-content text-center" style="padding-top: 20px; padding-bottom: 20px;">
                 <img src="images/spinner.gif" style="width: 60px; height: 60px;"/><br/>
-                <span style="font-size: 18px;">Please wait...</span>
+                <span style="font-size: 18px;">Transfering pokemon...</span>
             </div>
         </div>
     </div>
@@ -370,15 +370,7 @@
             });
             bindedData.totalCaptured(count);
             bindedData.captivePokemons(data.character.captives);
-
-            data.character.pokemons.sort((a, b) => {
-                return a.data.id - b.data.id;
-            });
             bindedData.pokemons(data.character.pokemons);
-
-            data.character.items.sort((a, b) => {
-                return a.item - b.item;
-            });
             count = 0;
             data.character.items.forEach((item) => {
                 count = count + item.count;
@@ -387,17 +379,13 @@
             bindedData.items(data.character.items);
         });
 
-        // on inventories
-        socket.on('inventories', function (data) {
-            data.pokemons.sort((a, b) => {
-                return a.data.id - b.data.id;
-            });
-            bindedData.pokemons(data.pokemons);
+        // on cleaning up pokemons
+        socket.on('cleaningPokemon', function () {
+            $('#progress-modal').modal('show');
+        });
 
-            data.items.sort((a, b) => {
-                return a.item - b.item;
-            });
-            bindedData.items(data.items);
+        socket.on('pokemonCleaned', function () {
+            $('#progress-modal').modal('hide');
         });
 
         // on setting new destination

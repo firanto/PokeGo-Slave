@@ -20,6 +20,12 @@ if (Number.prototype.toDegrees === undefined) {
     Number.prototype.toDegrees = function() { return this * 180 / Math.PI; };
 }
 
+// helper functions
+function numberWithCommas(x) {
+    return x.toString().replace(/\B(?=(\d{3})+(?!\d))/g, ",");
+}
+
+// Main object declaration
 var PokeGoWorker = function () {
     var self = this;
     self.logger = log4js.getLogger('PokeGoSlave');
@@ -27,6 +33,9 @@ var PokeGoWorker = function () {
 
     // socket.io object
     self.io = null;
+
+    // local settings
+    self.initialCleanup = true;
 
     // run and loop state
     self.started = false;
@@ -57,6 +66,7 @@ var PokeGoWorker = function () {
 
     self.destination = null;
     self.collectedPokeStops = [];
+    self.transferingPokemons = [];
 
     self.specificTargets = [];
     Settings.specificTargets.forEach((target) => {
@@ -133,20 +143,33 @@ var PokeGoWorker = function () {
         self.character.location.longitude = Pokeio.playerInfo.longitude;
         self.character.location.altitude = Pokeio.playerInfo.altitude;
 
-        self.logger.info('[o] -> Player: ' + profile.username);
-        self.logger.info('[o] -> Team: ' + team[profile.team]);
-        self.logger.info('[o] -> Poke Storage: ' + profile.poke_storage);
-        self.logger.info('[o] -> Item Storage: ' + profile.item_storage);
-        self.logger.info('[o] -> Poke Coin: ' + profile.currency[0].amount);
-        self.logger.info('[o] -> Star Dust: ' + profile.currency[1].amount);
-        self.logger.info('[o] -> location lat:' + Pokeio.playerInfo.latitude + ' lng: ' + Pokeio.playerInfo.longitude);
-
         // call load inventory.. Async.. So we don't wait this
         Pokeio.GetInventoryAsync().then((inventories) => {
             self.formatInventory(inventories);
 
+            self.logger.info('[o] -> Player: ' + profile.username);
+            self.logger.info('[o] -> Level: ' + self.character.level);
+            self.logger.info('[o] -> Team: ' + team[profile.team]);
+            self.logger.info('[o] -> Exp: ' + numberWithCommas(self.character.experience) + '/' + numberWithCommas(self.character.nextExperience));
+            self.logger.info('[o] -> Poke Storage: ' + profile.poke_storage);
+            self.logger.info('[o] -> Item Storage: ' + profile.item_storage);
+            self.logger.info('[o] -> Poke Coin: ' + profile.currency[0].amount);
+            self.logger.info('[o] -> Star Dust: ' + profile.currency[1].amount);
+            self.logger.info('[o] -> location lat:' + Pokeio.playerInfo.latitude + ' lng: ' + Pokeio.playerInfo.longitude);
+
             if (self.io) {
                 self.io.emit('character', { character: self.character });
+            }
+
+            // do initial cleanup
+            if (self.initialCleanup) {
+                self.initialCleanup = false;
+                self.started = false;
+                if (self.io) {
+                    self.io.emit('cleaningPokemon');
+                }
+                self.logger.info('[t] Transfering overcaptured pokemons...');
+                self.cleaningPokemon();
             }
         }).catch((err) => {
         });
@@ -175,6 +198,95 @@ var PokeGoWorker = function () {
             }
             count++;
         });
+        self.character.pokemons.sort((a, b) => {
+            return a.data.id - b.data.id || b.cp - a.cp;
+        });
+        self.character.items.sort((a, b) => {
+            return a.item - b.item;
+        });
+    }
+
+    self.cleaningPokemon = function () {
+        if (Settings.autoCleanPokemon) {
+            var groupedPokemons = [];
+            // grouping pokemons
+            self.character.pokemons.forEach((pokemon) => {
+                var pm = groupedPokemons.find((element) => {
+                    return element.pokemonId == pokemon.data.id;
+                });
+                if (typeof(pm) == 'undefined') {
+                    groupedPokemons.push({ pokemonId: pokemon.data.id, pokemons: [ pokemon ] });
+                }
+                else {
+                    pm.pokemons.push(pokemon);
+                }
+            });
+
+            // sorting and filtering removal
+            groupedPokemons.forEach((group) => {
+                if (group.pokemons.length > 5) {
+                    group.pokemons.sort((a, b) => {
+                        return b.cp - a.cp;
+                    });
+                    self.transferingPokemons.push.apply(self.transferingPokemons, group.pokemons.slice(Settings.pokemonKeepNumber));                                            
+                }
+            });
+
+            var cleanupLoop = setInterval(function() {
+                return new Promise(function(resolve, reject) {
+                    if (self.transferingPokemons.length > 0) {
+                        Pokeio.TransferPokemonAsync(self.transferingPokemons[0].id).then((data) => {
+                            if (data.Status == 1) {
+                                self.logger.info('[t] Successfully transfering ' + self.transferingPokemons[0].data.name + '(CP: ' + self.transferingPokemons[0].cp + ')!');
+                            }
+                            self.transferingPokemons.splice(0, 1);
+                            if (self.transferingPokemons.length == 0) {
+                                self.logger.info('[t] Transfering finished!');
+                                clearInterval(cleanupLoop);
+                                self.started = true;
+                                Pokeio.GetInventoryAsync().then((inventories) => {
+                                    self.formatInventory(inventories);
+
+                                    if (self.io) {
+                                        self.io.emit('pokemonCleaned');
+                                        self.io.emit('character', { character: self.character });
+                                    }
+                                }).catch((err) => {
+                                    console.log(err);
+                                    reject(err);
+                                });
+                            }
+                            resolve();
+                        }).catch((err) => {
+                            console.log(err);
+                        });
+                    }
+                }).then((a) => {
+                    return null;
+                });
+            }, Settings.loopInterval);
+
+
+            // self.doCleanup(self.transferingPokemons);
+        }
+    }
+
+    self.doCleanup = function(pokemons) {
+        if (pokemons.length > 0) {
+            Pokeio.TransferPokemonAsync(pokemons[0].id).then((data) => {
+                if (data.Status == 1) {
+                    self.logger.info('[t] Successfully transfering ' + pokemons[0].data.name + '(CP: ' + pokemons[0].cp + ')!');
+                }
+                pokemons.splice(0, 1);
+                if (pokemons.length > 0) {
+                    // self.doCleanup(pokemons);
+                }
+                else {
+                    self.logger.info('[t] Transfering finished!');
+                    self.started = true;
+                }
+            });
+        }
     }
 
     self.collectPokeStop = function (pokestop) {
