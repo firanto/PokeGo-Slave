@@ -376,11 +376,7 @@
             bindedData.totalCaptured(count);
             bindedData.captivePokemons(data.character.captives);
             bindedData.pokemons(data.character.pokemons);
-            count = 0;
-            data.character.items.forEach((item) => {
-                count = count + item.count;
-            });
-            bindedData.totalItems(count);
+            bindedData.totalItems(data.character.totalItems);
             bindedData.items(data.character.items);
         });
 

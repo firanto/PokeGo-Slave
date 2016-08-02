@@ -34,6 +34,8 @@ var PokeGoWorker = function () {
 
     // local settings
     self.initialCleanup = true;
+    self.noResultCounter = 0;
+    self.noResultLastOccurence = null;
 
     // run and loop state
     self.started = false;
@@ -46,9 +48,10 @@ var PokeGoWorker = function () {
         level: 0,
         experience: 0,
         nextExperience: 0,
+        kmWalked: 0,
         pokeStorage: 0,
         itemStorage: 0,
-        kmWalked: 0,
+        totalItems: 0,
         pokeCoin: 0,
         stardust: 0,
         location: {
@@ -58,6 +61,7 @@ var PokeGoWorker = function () {
             altitude: Settings.centerAltitude
         },
         pokemons: [],
+        pokemonFamilies: [],
         items: [],
         captives: []
     }
@@ -174,6 +178,7 @@ var PokeGoWorker = function () {
         self.character.pokemons.length = 0;
         self.character.items.length = 0;
         var count = 0;
+        var itemCount = 0;
         inventories.inventory_delta.inventory_items.forEach((inventory) => {
             if (inventory.inventory_item_data.pokemon && !inventory.inventory_item_data.pokemon.is_egg) {
                 inventory.inventory_item_data.pokemon.data = PokemonList[inventory.inventory_item_data.pokemon.pokemon_id - 1];
@@ -184,6 +189,7 @@ var PokeGoWorker = function () {
                 inventory.inventory_item_data.item.name = ItemList[inventory.inventory_item_data.item.item];
                 inventory.inventory_item_data.item.count = inventory.inventory_item_data.item.count != null ? inventory.inventory_item_data.item.count : 0; 
                 self.character.items.push(inventory.inventory_item_data.item);
+                itemCount = itemCount + inventory.inventory_item_data.item.count;
             }
             if (inventory.inventory_item_data.player_stats) {
                 self.character.level = inventory.inventory_item_data.player_stats.level;
@@ -192,9 +198,11 @@ var PokeGoWorker = function () {
                 self.character.kmWalked = inventory.inventory_item_data.player_stats.km_walked;
             }
             if (inventory.inventory_item_data.pokemon_family) {
+                self.character.pokemonFamilies.push({ familyId: inventory.inventory_item_data.pokemon_family.family_id, candy: inventory.inventory_item_data.pokemon_family.candy });
             }
             count++;
         });
+        self.character.totalItems = itemCount;
         self.character.pokemons.sort((a, b) => {
             return a.data.id - b.data.id || b.cp - a.cp;
         });
@@ -324,37 +332,58 @@ var PokeGoWorker = function () {
                 // else, encounter successful. time to throwing balls... :3
                 else {
                     setTimeout(() => {
-                        Pokeio.CatchPokemonAsync(data.WildPokemon, 1, 1.950, 1, Settings.ball).then((final) => {
-                            // if data is 'No result', this means we get nothing from the server
-                            if (data == 'No result') {
-                                reject(new Error(data));
+                        var ball = Settings.ball;
+                        for (i = ball; i < 5; i++) {
+                            var item = self.character.items.find((element) => {
+                                return element.item == i
+                            });
+                            if (typeof(item) == 'undefined') {
+                                ball = 5;
+                                break;
                             }
-                            // else, catch request successful. parse the result
-                            var status = ['Unexpected error', 'Successful catch', 'Catch Escape', 'Catch Flee', 'Missed Catch'];
-                            if(final.Status == null) {
-                                self.logger.info('[x] Error: You have no more of that ball left to use!');
-                            } else {
-                                data.WildPokemon.data = PokemonList[data.WildPokemon.pokemon.PokemonId - 1];
-                                self.logger.info('[s] Catch status for ' + data.WildPokemon.data.name + ': ' + status[parseInt(final.Status)]);
-                                if (final.Status == 1) {
-                                    var pm = self.character.captives.find((pm) => {
-                                        return pm.data.id == data.WildPokemon.data.id;
-                                    });
-                                    if (typeof(pm) == 'undefined') {
-                                        data.WildPokemon.count = 1;
-                                        self.character.captives.push(data.WildPokemon);
-                                    }
-                                    else {
-                                        pm.count = pm.count + 1;
-                                    }
-                                    self.logger.info('Captured ' + data.WildPokemon.data.name + ' at ' + data.WildPokemon.Latitude + ', ' + data.WildPokemon.Longitude + ', at ' + dateFormat(new Date(), "yyyy-mm-dd h-MM-ss"));
-                                    self.io.emit('captured', { pokemon: data.WildPokemon });
+                            else if (item.count <= 0) {
+                                ball = ball + 1;
+                            }
+                            else {
+                                break;
+                            }
+                        }
+                        if (ball < 5) {
+                            Pokeio.CatchPokemonAsync(data.WildPokemon, 1, 1.950, 1, ball).then((final) => {
+                                // if data is 'No result', this means we get nothing from the server
+                                if (data == 'No result') {
+                                    reject(new Error(data));
                                 }
-                            }
-                            resolve({ status: parseInt(final.Status), message: status[parseInt(final.Status)] });
-                        }).catch((err) => {
-                            reject(err);
-                        });
+                                // else, catch request successful. parse the result
+                                var status = ['Unexpected error', 'Successful catch', 'Catch Escape', 'Catch Flee', 'Missed Catch'];
+                                if(final.Status == null) {
+                                    self.logger.info('[x] Error: You have no more of that ball left to use!');
+                                } else {
+                                    data.WildPokemon.data = PokemonList[data.WildPokemon.pokemon.PokemonId - 1];
+                                    self.logger.info('[s] Catch status for ' + data.WildPokemon.data.name + ': ' + status[parseInt(final.Status)]);
+                                    if (final.Status == 1) {
+                                        var pm = self.character.captives.find((pm) => {
+                                            return pm.data.id == data.WildPokemon.data.id;
+                                        });
+                                        if (typeof(pm) == 'undefined') {
+                                            data.WildPokemon.count = 1;
+                                            self.character.captives.push(data.WildPokemon);
+                                        }
+                                        else {
+                                            pm.count = pm.count + 1;
+                                        }
+                                        self.logger.info('Captured ' + data.WildPokemon.data.name + ' at ' + data.WildPokemon.Latitude + ', ' + data.WildPokemon.Longitude + ', at ' + dateFormat(new Date(), "yyyy-mm-dd h-MM-ss"));
+                                        self.io.emit('captured', { pokemon: data.WildPokemon });
+                                    }
+                                }
+                                resolve({ status: parseInt(final.Status), message: status[parseInt(final.Status)] });
+                            }).catch((err) => {
+                                reject(err);
+                            });
+                        }
+                        else {
+                            resolve();
+                        }
                     }, 2000);
                 }
                 return null;
@@ -434,7 +463,7 @@ var PokeGoWorker = function () {
 
                 // loop until user says stop
                 self.doLoop = true;
-                setInterval(function() {
+                var loopInterval = setInterval(function() {
                     return new Promise(function(resolve, reject) {
                         if(self.started && self.doLoop) {
                             // call heartbeat
@@ -510,7 +539,7 @@ var PokeGoWorker = function () {
                                 self.io.emit('heartbeat', { heartbeat: hbData });
 
                                 // process nearby, collectable pokeStops
-                                if (Settings.collect && self.doLoop) {
+                                if (Settings.collect && self.doLoop && self.character.totalItems < self.character.itemStorage) {
                                     self.doLoop = false;
                                     var found = false;
                                     for (i = 0; i < hbData.pokeStops.length; i++) {
@@ -625,7 +654,29 @@ var PokeGoWorker = function () {
                             resolve('[p] Looping stalled to complete execution of task..');
                         }
                     }).then((a) => {
-                        self.logger.info(a);
+                        if (typeof(a) == Error) {
+                            self.logger.info(a.message);
+                            if (a.message == 'No result') {
+                                // log this error timestamp. Longer than 1 minute, reset the counter.
+                                if (!self.noResultLastOccurence || Math.floor((Math.abs(currentTimestamp - storedStop.timestamp)/1000)/60) > 1) {
+                                    self.noResultCounter = 0;
+                                }
+                                // less than 1 minute, increment the counter.
+                                else {
+                                    self.noResultCounter = self.noResultCounter + 1;
+                                }
+                                // when reaching 10 consecutive error of 'No result', this bot need to reset
+                                if (self.noResultCounter >= 10) {
+                                    clearInterval(loopInterval);
+                                    setTimeout(() => {
+                                        self.start();
+                                    }, 2000);
+                                }
+                            }
+                        }
+                        else {
+                            self.logger.info(a);
+                        }
                     });
                 }, Settings.loopInterval);
             })
