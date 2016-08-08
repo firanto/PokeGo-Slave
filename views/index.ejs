@@ -1,5 +1,6 @@
 <!DOCTYPE html>
 <html>
+
 <head>
     <title>
         PokeGo Slave
@@ -7,13 +8,18 @@
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <link rel='stylesheet' href='/stylesheets/style.css' />
     <script src='//ajax.googleapis.com/ajax/libs/jquery/1.12.4/jquery.min.js'></script>
-    <link rel='stylesheet' href='//cdn.materialdesignicons.com/1.6.50/css/materialdesignicons.min.css'/>
-    <link rel='stylesheet' href='//maxcdn.bootstrapcdn.com/bootstrap/3.3.6/css/bootstrap.min.css' integrity='sha384-1q8mTJOASx8j1Au+a5WDVnPi2lkFfwwEAa8hDDdjZlpLegxhjVME1fgjWPGmkzs7' crossorigin='anonymous'/>
-    <link rel='stylesheet' href='//maxcdn.bootstrapcdn.com/bootstrap/3.3.6/css/bootstrap-theme.min.css' integrity='sha384-fLW2N01lMqjakBkx3l/M9EahuwpSfeNvV63J5ezn3uZzapT0u7EYsXMjQV+0En5r' crossorigin='anonymous'/>
-    <script src='//maxcdn.bootstrapcdn.com/bootstrap/3.3.6/js/bootstrap.min.js' integrity='sha384-0mSbJDEHialfmuBBQP6A4Qrprq5OVfW37PRR3j5ELqxss1yVqOtnepnHVP9aJ7xS' crossorigin='anonymous'></script>
+    <link rel='stylesheet' href='//cdn.materialdesignicons.com/1.6.50/css/materialdesignicons.min.css' />
+    <link rel='stylesheet' href='//maxcdn.bootstrapcdn.com/bootstrap/3.3.6/css/bootstrap.min.css' integrity='sha384-1q8mTJOASx8j1Au+a5WDVnPi2lkFfwwEAa8hDDdjZlpLegxhjVME1fgjWPGmkzs7'
+        crossorigin='anonymous' />
+    <link rel='stylesheet' href='//maxcdn.bootstrapcdn.com/bootstrap/3.3.6/css/bootstrap-theme.min.css' integrity='sha384-fLW2N01lMqjakBkx3l/M9EahuwpSfeNvV63J5ezn3uZzapT0u7EYsXMjQV+0En5r'
+        crossorigin='anonymous' />
+    <script src='//maxcdn.bootstrapcdn.com/bootstrap/3.3.6/js/bootstrap.min.js' integrity='sha384-0mSbJDEHialfmuBBQP6A4Qrprq5OVfW37PRR3j5ELqxss1yVqOtnepnHVP9aJ7xS'
+        crossorigin='anonymous'></script>
     <!-- please append your own key to this google maps api -->
     <!-- api key: AIzaSyCb0On0hKftgysntiZpWFGaKEibox-7Ev4 -->
     <script src='//maps.googleapis.com/maps/api/js'></script>
+    <script src="//cdnjs.cloudflare.com/ajax/libs/marker-animate-unobtrusive/0.2.8/vendor/markerAnimate.js"></script>
+    <script src="//cdnjs.cloudflare.com/ajax/libs/marker-animate-unobtrusive/0.2.8/SlidingMarker.min.js"></script>
     <script src="//cdn.socket.io/socket.io-1.4.5.js"></script>
     <script type='text/javascript' src='//cdnjs.cloudflare.com/ajax/libs/knockout/3.4.0/knockout-min.js'></script>
     <style>
@@ -26,8 +32,9 @@
             position: absolute;
             padding: 0px;
             background-color: #eee;
-            transition:all 500ms ease-out 0.5s;
+            transition: all 500ms ease-out 0.5s;
         }
+        
         #storage-tab {
             width: 40px;
             height: 40px;
@@ -40,9 +47,10 @@
             color: #fff;
             background-color: #444;
             border-radius: 0px 0px 0px 5px;
-            transition:all 500ms ease-out 0.5s;
+            transition: all 500ms ease-out 0.5s;
             opacity: 0;
         }
+        
         #storage-panel {
             width: 300px;
             height: calc(100% - 180px);
@@ -53,8 +61,9 @@
             padding: 0px;
             background-color: #fff;
             border-left: 1px solid #444;
-            transition:all 500ms ease-out 0.5s;
+            transition: all 500ms ease-out 0.5s;
         }
+        
         #storage-panel-tab {
             width: 140px;
             height: 20px;
@@ -64,13 +73,14 @@
             background-color: #444;
             border-radius: 0px 0px 5px 0px;
         }
+        
         #storage-panel-content {
             height: calc(100% - 20px);
             padding: 10px 10px 10px 10px;
             color: #444;
             background-color: #fff;
         }
-
+        
         #captives {
             top: 155px;
             width: calc(100% - 20px);
@@ -78,6 +88,7 @@
             position: absolute;
             overflow-y: scroll;
         }
+        
         #pokemons {
             top: 155px;
             width: calc(100% - 20px);
@@ -85,6 +96,15 @@
             position: absolute;
             overflow-y: scroll;
         }
+        
+        #eggs {
+            top: 155px;
+            width: calc(100% - 20px);
+            bottom: 0px;
+            position: absolute;
+            overflow-y: scroll;
+        }
+        
         #items {
             top: 155px;
             width: calc(100% - 20px);
@@ -92,13 +112,14 @@
             position: absolute;
             overflow-y: scroll;
         }
-
+        
         #collected-modal ul {
             list-style-type: none;
             width: 100%;
             margin: 0px;
             padding: 0px;
         }
+        
         #collected-modal ul li {
             width: 100%;
             height: 30px;
@@ -106,13 +127,14 @@
             padding: 0px;
             text-align: left;
         }
+        
         .collected-item {
             width: 100%;
             height: 40px;
             padding-left: 6px;
             padding-right: 6px;
         }
-
+        
         #nearby-panel-tab {
             width: 140px;
             height: 20px;
@@ -125,6 +147,7 @@
             background-color: #444;
             border-radius: 0px 5px 0px 0px;
         }
+        
         #nearby-panel {
             width: 100%;
             height: 130px;
@@ -138,15 +161,18 @@
             overflow-x: auto;
             overflow-y: hidden;
         }
+        
         #nearby-panel ul {
             list-style-type: none;
             width: 99999px;
             margin: 0px;
             padding: 0px;
         }
+        
         #nearby-panel li {
             float: left;
         }
+        
         .nearby-item {
             width: 120px;
             height: 100%;
@@ -155,10 +181,12 @@
             margin-right: 6px;
             text-align: center;
         }
+        
         .nearby-item > div {
             width: 120px;
             height: 20px;
         }
+        
         .nearby-item > img {
             width: 60px;
             height: 60px;
@@ -171,7 +199,7 @@
         <div class="container-fluid">
             <div class="navbar-header">
                 <a class="navbar-brand">
-                    <img alt="Brand" src="images/brand-logo.png" style="margin-top:-10px; float: left;"/>
+                    <img alt="Brand" src="images/brand-logo.png" style="margin-top:-10px; float: left;" />
                     <span>PokeGo Slave - </span>
                     <span data-bind="text: trainerInfo"></span>
                 </a>
@@ -189,15 +217,34 @@
         <div id="storage-panel-content">
             <table class="table table-condensed">
                 <tbody class="table-bordered">
-                    <tr><td width="70">PokeCoin</td><td width="10">:</td><td data-bind="text: pokeCoin"></td></tr>
-                    <tr><td>Stardust</td><td>:</td><td data-bind="text: stardust"></td></tr>
+                    <tr>
+                        <td width="70">PokeCoin</td>
+                        <td width="10">:</td>
+                        <td data-bind="text: pokeCoin"></td>
+                    </tr>
+                    <tr>
+                        <td>Stardust</td>
+                        <td>:</td>
+                        <td data-bind="text: stardust"></td>
+                    </tr>
                 </tbody>
             </table>
 
             <!-- Nav tabs -->
             <ul class="nav nav-tabs" role="tablist">
                 <li role="presentation" class="active"><a href="#captives" aria-controls="captives" role="tab" data-toggle="tab">Captives</a></li>
+                <!--
                 <li role="presentation"><a href="#pokemons" aria-controls="pokemons" role="tab" data-toggle="tab">Pokemons</a></li>
+                -->
+                <li role="presentation" class="dropdown">
+                    <a class="dropdown-toggle" data-toggle="dropdown" href="#" role="button" aria-haspopup="true" aria-expanded="false">
+                        Pokemons <span class="caret"></span>
+                    </a>
+                    <ul class="dropdown-menu">
+                        <li role="presentation"><a href="#pokemons" aria-controls="pokemons" role="tab" data-toggle="tab">Pokemons</a></li>
+                        <li role="presentation"><a href="#eggs" aria-controls="eggs" role="tab" data-toggle="tab">Eggs</a></li>
+                    </ul>
+                </li>
                 <li role="presentation"><a href="#items" aria-controls="items" role="tab" data-toggle="tab">Items</a></li>
             </ul>
 
@@ -227,7 +274,23 @@
                                     <div style="width:50%; float:left;"><span data-bind="text: data.name"></span></div>
                                     <div style="width:50%; float:right;">HP: <span data-bind="text: stamina"></span>/<span data-bind="text: stamina_max"></span></div>
                                     <div style="width:50%; float:left;">CP: <span data-bind="text: cp"></span></div>
-                                    <div style="width:50%; float:right;"><span data-bind="text: defending"></span></div>
+                                    <div style="width:50%; float:right;"><img data-bind="attr: { src: defendingIcon, width: 20, height: 20 }"></img>
+                                    </div>
+                                </td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+                <div role="tabpanel" class="tab-pane fade" id="eggs">
+                    <div style="height: 30px; line-height: 30px;">Eggs: <span data-bind="text: eggs().length"></span>/9</div>
+                    <table class="table table-condensed table-striped">
+                        <tbody class="table-bordered" data-bind="foreach: eggs">
+                            <tr>
+                                <td width="50" height="50"><img src="images/egg-40.png" width="40" height="40" /></td>
+                                <td>
+                                    <div style="height:40px; line-height: 40px; float:left;">Hatching: <span data-bind="text: egg_km_walked_start"></span>/<span data-bind="text: egg_km_walked_target"></span> km</div>
+                                    <div style="width:40px; height:40px; line-height: 40px; float:right;"><img data-bind="attr: { src: incubatedIcon, width: 20, height: 20 }"></img>
+                                    </div>
                                 </td>
                             </tr>
                         </tbody>
@@ -258,7 +321,7 @@
                 <div class="nearby-item">
                     <div><span data-bind="text: data.name"></span></div>
                     <img data-bind="attr: { src: data.img }" />
-                    <div><span data-bind="text: DistanceMeters"></span>m++</div>
+                    <!--<div><span data-bind="text: DistanceMeters"></span>m++</div>-->
                 </div>
             </li>
         </ul>
@@ -282,8 +345,8 @@
     <div id="captured-modal" class="modal fade" tabindex="-1" role="dialog" aria-labelledby="mySmallModalLabel">
         <div class="modal-dialog modal-sm">
             <div class="modal-content text-center nearby-item" style="padding-top: 20px; padding-bottom: 20px;width: 200px;">
-                    <div class="text-center" style="width:100%;"><span>Captured </span><span data-bind="text: latestCaptiveName"></span></div>
-                    <img data-bind="attr: { src: latestCaptiveImage }" />
+                <div class="text-center" style="width:100%;"><span>Captured </span><span data-bind="text: latestCaptiveName"></span></div>
+                <img data-bind="attr: { src: latestCaptiveImage }" />
             </div>
         </div>
     </div>
@@ -291,13 +354,13 @@
     <div id="progress-modal" class="modal fade" tabindex="-1" role="dialog" aria-labelledby="mySmallModalLabel">
         <div class="modal-dialog modal-sm">
             <div class="modal-content text-center" style="padding-top: 20px; padding-bottom: 20px;">
-                <img src="images/spinner.gif" style="width: 60px; height: 60px;"/><br/>
+                <img src="images/spinner.gif" style="width: 60px; height: 60px;" /><br/>
                 <span style="font-size: 18px;">Transfering pokemon...</span>
             </div>
         </div>
     </div>
 
-<script>
+    <script>
     // global variables
     var token = '<%=token;%>';
     var storageOpened = false;
@@ -307,6 +370,7 @@
     var playerMarker = null;
     var destinationMarker = null;
     var capturedMarker = null;
+    var character = null;
     var pokeStops = [];
     var gyms = [];
     var plottedPokemons = [];
@@ -323,7 +387,7 @@
         this.trainerExp = ko.observable(0);
         this.trainerNextExp = ko.observable(0);
         this.trainerKm = ko.observable(0);
-        this.trainerInfo = ko.computed(function() {
+        this.trainerInfo = ko.computed(() => {
             return this.trainerName() + ', Lv.' + this.trainerLevel() + ', Team: ' + this.trainerTeam() +
                 ', Exp: ' + numberWithCommas(this.trainerExp()) + '/' + numberWithCommas(this.trainerNextExp()) +
                 ', km walked: ' + numberWithCommas(this.trainerKm()) + 'km';
@@ -339,6 +403,7 @@
         this.nearbyPokemons = ko.observableArray();
         this.captivePokemons = ko.observableArray();
         this.pokemons = ko.observableArray();
+        this.eggs = ko.observableArray();
         this.items = ko.observableArray();
         this.totalItems = ko.observable(0);
     }
@@ -356,6 +421,7 @@
 
         // on update player
         socket.on('character', function (data) {
+            character = data.character;
             bindedData.trainerName(data.character.username);
             bindedData.trainerTeam(data.character.team);
             bindedData.trainerLevel(data.character.level);
@@ -370,12 +436,46 @@
 
             // update captive data
             var count = 0;
-            data.character.captives.forEach((captive) => {
+            data.character.captives.forEach(captive => {
                 count = count + captive.count;
             });
             bindedData.totalCaptured(count);
             bindedData.captivePokemons(data.character.captives);
+            // add defending icon
+            data.character.pokemons.forEach(pokemon => {
+                pokemon.defendingIcon = ko.computed(() => {
+                    if (pokemon.defending != '') {
+                        if (data.character.team == 'Valor') {
+                            return 'images/gym-icon-valor-40.png';
+                        }
+                        else if (data.character.team == 'Mystic') {
+                            return 'images/gym-icon-mystic-40.png';
+                        }
+                        else if (data.character.team == 'Instinct') {
+                            return 'images/gym-icon-instinct-40.png';
+                        }
+                        else {
+                            return 'images/empty.png';
+                        }
+                    }
+                    else {
+                        return 'images/empty.png';
+                    }
+                });
+            });
             bindedData.pokemons(data.character.pokemons);
+            // add defending icon
+            data.character.eggs.forEach(egg => {
+                egg.incubatedIcon = ko.computed(() => {
+                    if (egg.egg_incubator_id != '') {
+                        return 'images/egg-40.png';
+                    }
+                    else {
+                        return 'images/empty.png';
+                    }
+                });
+            });
+            bindedData.eggs(data.character.eggs);
             bindedData.totalItems(data.character.totalItems);
             bindedData.items(data.character.items);
         });
@@ -428,15 +528,9 @@
                 plotGym(gym);
             });
 
-            // show map pokemons on the map
-            // data.heartbeat.mapPokemons.forEach((pokemon) => {
-            //     plotMapPokemon(pokemon);
-            //     plottedPokemons.push(pokemon);
-            // });
-
-            // show wild pokemons on the map
-            data.heartbeat.wildPokemons.forEach((pokemon) => {
-                plotWildPokemon(pokemon);
+            // show catchable pokemons on the map
+            data.heartbeat.catchablePokemons.forEach((pokemon) => {
+                plotCatchablePokemon(pokemon);
                 plottedPokemons.push(pokemon);
             });
 
@@ -452,10 +546,12 @@
             zoom: 18
         });
         
-        playerMarker = new google.maps.Marker({
+        playerMarker = new SlidingMarker({
             position: map.center,
             icon: 'images/person-40.png',
-            map: map
+            map: map,
+            duration: <%=loopInterval;%>,
+            easing: "linear"
         });
     }
 
@@ -483,22 +579,22 @@
 
     function plotPokeStop(pokeStop) {
         var icon = null;
-        if (pokeStop.LureInfo) {
-            icon = pokeStop.Enabled ? 'images/pokestop-lure-40.png' : 'images/pokestop-lure-used-40.png';
+        if (pokeStop.lure_info) {
+            icon = pokeStop.enabled ? 'images/pokestop-lure-40.png' : 'images/pokestop-lure-used-40.png';
         }
         else {
-            icon = pokeStop.Enabled ? 'images/pokestop-40.png' : 'images/pokestop-used-40.png';
+            icon = pokeStop.enabled ? 'images/pokestop-40.png' : 'images/pokestop-used-40.png';
         }
 
         // find pokeStop
         var ps = pokeStops.find((ps) => {
-            return ps.FortId == pokeStop.FortId
+            return ps.id == pokeStop.id
         });
 
         // if not found, create one and insert it, else, replace
         if (typeof(ps) == 'undefined') {
             pokeStop.marker = new google.maps.Marker({
-                position: { lat: pokeStop.Latitude, lng: pokeStop.Longitude },
+                position: { lat: pokeStop.latitude, lng: pokeStop.longitude },
                 icon: icon,
                 map: map
             });
@@ -514,7 +610,7 @@
 
     function plotGym(gym) {
         var icon = null;
-        switch (gym.Team) {
+        switch (gym.owned_by_team) {
             case 0:
                 icon = 'images/gym-80.png';
                 break;
@@ -531,13 +627,13 @@
 
         // find gym
         var gm = gyms.find((gm) => {
-            return gm.FortId == gym.FortId
+            return gm.id == gym.id
         });
 
         // if not found, create one and insert it, else, replace
         if (typeof(gm) == 'undefined') {
             gym.marker = new google.maps.Marker({
-                position: { lat: gym.Latitude, lng: gym.Longitude },
+                position: { lat: gym.latitude, lng: gym.longitude },
                 icon: icon,
                 map: map
             });
@@ -551,22 +647,9 @@
         }
     }
 
-    function plotMapPokemon(pokemon) {
+    function plotCatchablePokemon(pokemon) {
         pokemon.marker = new google.maps.Marker({
-            position: { lat: pokemon.Latitude, lng: pokemon.Longitude },
-            icon: {
-                url: pokemon.data.img,
-                scaledSize: new google.maps.Size(40, 40),
-                origin: new google.maps.Point(0,0),
-                anchor: new google.maps.Point(20,20)
-            },
-            map: map
-        });
-    }
-
-    function plotWildPokemon(pokemon) {
-        pokemon.marker = new google.maps.Marker({
-            position: { lat: pokemon.Latitude, lng: pokemon.Longitude },
+            position: { lat: pokemon.latitude, lng: pokemon.longitude },
             icon: {
                 url: pokemon.data.img,
                 scaledSize: new google.maps.Size(40, 40),
@@ -578,10 +661,12 @@
     }
 
     function plotCapturedPokemon(pokemon) {
-        pokemon.marker = new google.maps.Marker({
-            position: { lat: pokemon.Latitude, lng: pokemon.Longitude },
+        pokemon.marker = new SlidingMarker({
+            position: { lat: pokemon.latitude, lng: pokemon.longitude },
             icon: 'images/pokeball-40.png',
-            map: map
+            map: map,
+            duration: 1000,
+            easing: "easeOutExpo"
         });
         $('#captured-modal').modal('show');
         setTimeout(function(){

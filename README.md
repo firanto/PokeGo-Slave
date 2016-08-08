@@ -33,6 +33,7 @@ Here are the settings' explanation:
 - loopInterval: Your operation interval in milliseconds. 4000 should be safe for now. Less than that, I'm pretty sure they will throttle you.
 - autoCleanPokemon: Define whether you want to clean your pokemon storage by transferring duplicates.
 - pokemonKeepNumber: Number of pokemon you want to keep in your storage. i.e: if you set it to 3, then you'll have at least 3 pidgie after purging them.
+- pokemonKeepSpecific: Exceptions for keep number. Pokemon listed here will have individual keep number.
 - step: Your character step distance in meter. Note that this is related with the loop interval. In the default value, this means 10 meter for 4 seconds (a.k.a 2.5m/s).
 - ball: Your ball to use. 1 = Pokeball, 2 = Great Ball, 3 = Ultra Ball, 4 = Master Ball.
 - movement: Your character movement. For now, it support "none", if you want your character standstill, and "random" for random destination walks.
@@ -43,8 +44,8 @@ Here are the settings' explanation:
 
 That's it. :3
 
-#TODO:
-##Checklist
+# TODO:
+## Checklist
 - [X] Auto-walk using random coordinate to hatch eggs
 - [X] Catch Nearby Pokemon automatically
 - [X] Use Normal/Super/Great Pokeballs... (need a rework to cascade usages)
@@ -61,13 +62,16 @@ That's it. :3
 - [ ] Drop items when bag is full. I think this should be done manually from UI.
 - [ ] Incubate eggs
 
-##Considered, but not primary target
+## Considered, but not primary target
 - [ ] Evolve pokemon
 - [ ] Use candy
 
-#Additional information
+# Additional information
 Regarding s2geometry-node issue (specially in Windows), just make sure you have install the build tools at the link above. 
 If your still have error on building it, try update your npm with 'npm install -g npm@next' with Administrator credentials.
 
-#Dependency
-Thanks to [Arm4x](https://github.com/Armax) who provide the node's verison of pokemon go api which you can found [here](https://github.com/Armax/Pokemon-GO-node-api).
+# Dependency
+This poject use api which can be found [here](https://github.com/cyraxx/pogobuf)
+
+### Thanks to:
+Thanks to [Arm4x](https://github.com/Armax) who provide the node's verison of pokemon go api for us to learn which you can found [here](https://github.com/Armax/Pokemon-GO-node-api).

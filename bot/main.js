@@ -1,15 +1,24 @@
-var Promise = require("bluebird");
-var Geolib = require('geolib');
-var dateFormat = require('dateformat');
-var log4js = require('log4js');
-var fs = require('fs');
+'use strict';
 
-var Pokeio = Promise.promisifyAll(require('pokemon-go-node-api'));
+const Promise = require("bluebird");
+const Geolib = require('geolib');
+const dateFormat = require('dateformat');
+const log4js = require('log4js');
+const fs = require('fs');
+const Long = require('long');
+
+const Pokeio = Promise.promisifyAll(require('pokemon-go-node-api'));
+const pogobuf = require('pogobuf');
+const POGOProtos = require('node-pogo-protos');
+
+// temporary requirement
+const utils = require('./utils.js');
 
 // load settings data
 const PokemonList = JSON.parse(fs.readFileSync(__dirname + '/pokemons.json', 'utf8')).pokemon;
 const ItemList = JSON.parse(fs.readFileSync(__dirname + '/items.json', 'utf8'));
 
+// settings must be var because we inject second layer setting item on the fly
 var Settings = JSON.parse(fs.readFileSync(__dirname + '/settings.json', 'utf8'));
 
 log4js.configure({ appenders: [ { type: 'console' }, { type: 'file', filename: 'logs/log ' + dateFormat(new Date(), "yyyy-mm-dd h-MM-ss") + '.log', category: 'PokeGoSlave' } ]});
@@ -28,6 +37,8 @@ function numberWithCommas(x) {
 var PokeGoWorker = function () {
     var self = this;
     self.logger = log4js.getLogger('PokeGoSlave');
+    self.login = null;
+    self.client = null;
 
     // socket.io object
     self.io = null;
@@ -62,17 +73,36 @@ var PokeGoWorker = function () {
         },
         pokemons: [],
         pokemonFamilies: [],
+        eggs: [],
+        candies: [],
         items: [],
         captives: []
     }
+
+    self.hbData = {
+        location: self.character.location,
+        pokeStops: [],
+        gyms: [],
+        catchablePokemons: [],
+        nearbyPokemons: [],
+        wildPokemons: []
+    };
 
     self.destination = null;
     self.collectedPokeStops = [];
     self.transferingPokemons = [];
 
+    self.transferSpecific = [];
+    Settings.pokemonKeepSpecific.forEach(keep => {
+        var pokemon = PokemonList.find(pokemon => {
+            return pokemon.name.toLowerCase() == keep.name.toLowerCase();
+        });
+        self.transferSpecific.push({ pokemonId: parseInt(pokemon.id), limit: keep.limit });
+    });
+
     self.specificTargets = [];
-    Settings.specificTargets.forEach((target) => {
-        var pokemon = PokemonList.find((pokemon) => {
+    Settings.specificTargets.forEach(target => {
+        var pokemon = PokemonList.find(pokemon => {
             return pokemon.name.toLowerCase() == target.toLowerCase();
         });
         self.specificTargets.push(pokemon);
@@ -123,94 +153,117 @@ var PokeGoWorker = function () {
         return { latitude: foundLatitude, longitude: foundLongitude };
     }
 
-    // character data formater
-    self.formatPlayerCard = function(profile) {
-        let team = ['Nuetral','Mystic','Valor','Instinct'];
+    // get player, hatched eggs, and inventory data
+    self.getTrainerInformation = function () {
+        return new Promise(function(resolve, reject) {
+            // get player profile and inventory in batch mode
+            self.client.batchStart().getPlayer().getHatchedEggs().getInventory(0).batchCall().then(responses => {
+                // responses is: [GetPlayerResponse, GetHatchedEggsResponse, GetInventoryResponse]
+                // parse player data
+                let team = ['Nuetral', 'Mystic', 'Valor', 'Instinct'];
+                let profile = responses[0].player_data;
+                self.character.username = profile.username;
+                self.character.team = team[profile.team];
+                self.character.pokeStorage = profile.max_pokemon_storage;
+                self.character.itemStorage = profile.max_item_storage;
+                self.character.pokeCoin = profile.currencies[0].amount;
+                self.character.stardust = profile.currencies[1].amount;
+                self.character.location.latitude = self.client.playerLatitude;
+                self.character.location.longitude =self.client.playerLongitude;
 
-        if (profile.team == null) {
-            profile.team = 0;
-        }
-        if (!profile.currency[0].amount) {
-            profile.currency[0].amount = 0;
-        }
+                // parse hatched egg data
+                let hatched = responses[1];
+                let hatchedInfo = [];
+                if (hatched.candy_awarded.length > 0) {
+                    for (let i = 0; i < hatched.candy_awarded.length; i++) {
+                        hatchedInfo.push({
+                            candy: hatched.candy_awarded[i],
+                            experience: hatched.experience_awarded[i],
+                            pokemon: PokemonList[hatched.pokemon_id[i] - 1],
+                            stardust: hatched.stardust_awarded[i]
+                        });
+                    }
+                }
 
-        self.character.username = profile.username;
-        self.character.team = team[profile.team];
-        self.character.pokeStorage = profile.poke_storage;
-        self.character.itemStorage = profile.item_storage;
-        self.character.pokeCoin = profile.currency[0].amount;
-        self.character.stardust = profile.currency[1].amount;
-        self.character.location.name = Pokeio.playerInfo.locationName;
-        self.character.location.latitude = Pokeio.playerInfo.latitude;
-        self.character.location.longitude = Pokeio.playerInfo.longitude;
-        self.character.location.altitude = Pokeio.playerInfo.altitude;
+                //parse inventories
+                let inventories = responses[2].inventory_delta.inventory_items;
+                let itemCount = 0;
+                self.character.pokemons.length = 0;
+                self.character.eggs.length = 0;
+                self.character.items.length = 0;
+                self.character.candies.length = 0;
+                inventories.forEach(inventory => {
+                    let data = inventory.inventory_item_data;
+                    if (data.player_stats) {
+                        self.character.level = data.player_stats.level;
+                        self.character.experience = data.player_stats.experience.low;
+                        self.character.nextExperience = data.player_stats.next_level_xp.low;
+                        self.character.kmWalked = data.player_stats.km_walked;
+                    }
+                    if (data.pokemon_data) {
+                        if (data.pokemon_data.is_egg) {
+                            self.character.eggs.push(data.pokemon_data);
+                        }
+                        else {
+                            data.pokemon_data.data = PokemonList[data.pokemon_data.pokemon_id - 1];
+                            data.pokemon_data.defending = data.pokemon_data.deployed_fort_id != '' ? 'defending' : '';
+                            self.character.pokemons.push(data.pokemon_data);
+                        }
+                    }
+                    if (data.item) {
+                        data.item.name = ItemList[data.item.item_id];
+                        data.item.count = data.item.count != null ? data.item.count : 0; 
+                        self.character.items.push(data.item);
+                        itemCount = itemCount + data.item.count;
+                    }
+                    if (data.candy) {
+                        self.character.candies.push({ familyId: data.candy.family_id, candy: data.candy.candy });
+                    }
+                });
+                self.character.totalItems = itemCount;
+                self.character.pokemons.sort((a, b) => {
+                    return a.pokemon_id - b.pokemon_id || b.cp - a.cp;
+                });
+                self.character.items.sort((a, b) => {
+                    return a.item_id - b.item_id;
+                });
 
-        // call load inventory.. Async.. So we don't wait this
-        Pokeio.GetInventoryAsync().then((inventories) => {
-            self.formatInventory(inventories);
+                if (self.io) {
+                    self.io.emit('character', { character: self.character, hatchedInfo: hatchedInfo });
+                }
 
-            self.logger.info('[o] -> Player: ' + profile.username);
-            self.logger.info('[o] -> Level: ' + self.character.level);
-            self.logger.info('[o] -> Team: ' + team[profile.team]);
-            self.logger.info('[o] -> Exp: ' + numberWithCommas(self.character.experience) + '/' + numberWithCommas(self.character.nextExperience));
-            self.logger.info('[o] -> Poke Storage: ' + profile.poke_storage);
-            self.logger.info('[o] -> Item Storage: ' + profile.item_storage);
-            self.logger.info('[o] -> Poke Coin: ' + profile.currency[0].amount);
-            self.logger.info('[o] -> Star Dust: ' + profile.currency[1].amount);
-            self.logger.info('[o] -> location lat:' + Pokeio.playerInfo.latitude + ' lng: ' + Pokeio.playerInfo.longitude);
+                // log player info
+                self.logger.info('[o] -> Player: ' + self.character.username);
+                self.logger.info('[o] -> Level: ' + self.character.level);
+                self.logger.info('[o] -> Team: ' + self.character.team);
+                self.logger.info('[o] -> Exp: ' + numberWithCommas(self.character.experience) + '/' + numberWithCommas(self.character.nextExperience));
+                self.logger.info('[o] -> Poke Coin: ' + self.character.pokeCoin);
+                self.logger.info('[o] -> Stardust: ' + self.character.stardust);
+                self.logger.info('[o] -> Pokemons: ' + self.character.pokemons.length + '/' + self.character.pokeStorage);
+                self.logger.info('[o] -> Items: ' + self.character.totalItems + '/' + self.character.itemStorage);
+                self.logger.info('[o] -> location lat:' + self.character.location.latitude + ' lng: ' + self.character.location.longitude);
 
-            if (self.io) {
-                self.io.emit('character', { character: self.character });
-            }
+                hatchedInfo.forEach(element => {
+                    self.logger.info('[o] -> Hatched: ' + element.stardust);
+                });
 
-            // do initial cleanup
-            if (self.initialCleanup) {
-                self.initialCleanup = false;
-                self.cleaningPokemon();
-            }
-        }).catch((err) => {
-        });
-
-        return true;
-    };
-
-    self.formatInventory = function (inventories) {
-        self.character.pokemons.length = 0;
-        self.character.items.length = 0;
-        var count = 0;
-        var itemCount = 0;
-        inventories.inventory_delta.inventory_items.forEach((inventory) => {
-            if (inventory.inventory_item_data.pokemon && !inventory.inventory_item_data.pokemon.is_egg) {
-                inventory.inventory_item_data.pokemon.data = PokemonList[inventory.inventory_item_data.pokemon.pokemon_id - 1];
-                inventory.inventory_item_data.pokemon.defending = inventory.inventory_item_data.pokemon.deployed_fort_id != null ? 'defending' : '';
-                self.character.pokemons.push(inventory.inventory_item_data.pokemon);
-            }
-            if (inventory.inventory_item_data.item) {
-                inventory.inventory_item_data.item.name = ItemList[inventory.inventory_item_data.item.item];
-                inventory.inventory_item_data.item.count = inventory.inventory_item_data.item.count != null ? inventory.inventory_item_data.item.count : 0; 
-                self.character.items.push(inventory.inventory_item_data.item);
-                itemCount = itemCount + inventory.inventory_item_data.item.count;
-            }
-            if (inventory.inventory_item_data.player_stats) {
-                self.character.level = inventory.inventory_item_data.player_stats.level;
-                self.character.experience = inventory.inventory_item_data.player_stats.experience.low;
-                self.character.nextExperience = inventory.inventory_item_data.player_stats.next_level_xp.low;
-                self.character.kmWalked = inventory.inventory_item_data.player_stats.km_walked;
-            }
-            if (inventory.inventory_item_data.pokemon_family) {
-                self.character.pokemonFamilies.push({ familyId: inventory.inventory_item_data.pokemon_family.family_id, candy: inventory.inventory_item_data.pokemon_family.candy });
-            }
-            count++;
-        });
-        self.character.totalItems = itemCount;
-        self.character.pokemons.sort((a, b) => {
-            return a.data.id - b.data.id || b.cp - a.cp;
-        });
-        self.character.items.sort((a, b) => {
-            return a.item - b.item;
+                if (self.initialCleanup) {
+                    self.initialCleanup = false;
+                    self.cleaningPokemon();
+                    // schedule auto-clean every 30 minutes
+                    setInterval(() => {
+                        self.cleaningPokemon();
+                    }, 1800000);
+                }
+                resolve();
+            }).catch(err => {
+                self.logger.error(err);
+                reject(err);
+            });
         });
     }
 
+    // character data formater
     self.cleaningPokemon = function () {
         if (Settings.autoCleanPokemon) {
             self.started = false;
@@ -234,11 +287,18 @@ var PokeGoWorker = function () {
 
             // sorting and filtering removal
             groupedPokemons.forEach((group) => {
-                if (group.pokemons.length > 5) {
+                var keepNumber = Settings.pokemonKeepNumber;
+                var keepLimit = self.transferSpecific.find(keep => {
+                    return keep.pokemonId == group.pokemonId;
+                });
+                if (typeof(keepLimit) != 'undefined') {
+                    keepNumber = keepLimit.limit;
+                }
+                if (group.pokemons.length > keepNumber) {
                     group.pokemons.sort((a, b) => {
                         return b.cp - a.cp;
                     });
-                    self.transferingPokemons.push.apply(self.transferingPokemons, group.pokemons.slice(Settings.pokemonKeepNumber));                                            
+                    self.transferingPokemons.push.apply(self.transferingPokemons, group.pokemons.slice(keepNumber));                                            
                 }
             });
 
@@ -246,21 +306,18 @@ var PokeGoWorker = function () {
                 var cleanupLoop = setInterval(function() {
                     return new Promise(function(resolve, reject) {
                         if (self.transferingPokemons.length > 0) {
-                            Pokeio.TransferPokemonAsync(self.transferingPokemons[0].id).then((data) => {
-                                if (data.Status == 1) {
+                            self.client.releasePokemon(self.transferingPokemons[0].id).then(response => {
+                                if (response.result == 1) {
                                     self.logger.info('[t] Successfully transfering ' + self.transferingPokemons[0].data.name + '(CP: ' + self.transferingPokemons[0].cp + ')!');
+                                    self.transferingPokemons.splice(0, 1);
                                 }
-                                self.transferingPokemons.splice(0, 1);
                                 if (self.transferingPokemons.length == 0) {
                                     self.logger.info('[t] Transfering finished!');
                                     clearInterval(cleanupLoop);
                                     self.started = true;
-                                    Pokeio.GetInventoryAsync().then((inventories) => {
-                                        self.formatInventory(inventories);
-
+                                    self.getTrainerInformation().then(() => {
                                         if (self.io) {
                                             self.io.emit('pokemonCleaned');
-                                            self.io.emit('character', { character: self.character });
                                         }
                                         resolve();
                                     }).catch((err) => {
@@ -286,7 +343,7 @@ var PokeGoWorker = function () {
                     }).then((a) => {
                         return null;
                     });
-                }, Settings.loopInterval);
+                }, 5000);
             }
             else {
                 self.started = true;
@@ -300,42 +357,43 @@ var PokeGoWorker = function () {
 
     self.collectPokeStop = function (pokestop) {
         return new Promise(function(resolve, reject) {
-            Pokeio.GetFortAsync(pokestop.FortId, pokestop.Latitude, pokestop.Longitude).then((gfResponse) => {
+            self.client.fortSearch(pokestop.id, pokestop.latitude, pokestop.longitude).then(response => {
                 var status = ['Unexpected Error','Successful collect','Out of range','Already collected','Inventory Full'];
+
                 // result = 1 means success
-                if (gfResponse.result == 1) {
+                if (response.result == 1) {
                     self.collectedPokeStops.push({ pokeStop: pokestop, timestamp: new Date() });
-                    self.logger.info('[s] Collect status for PokeStop at ' + pokestop.Latitude + ', ' + pokestop.Longitude + " was " + status[parseInt(gfResponse.result)]);
-                    gfResponse.items_awarded.forEach((item) => {
+                    self.logger.info('[s] Collect status for PokeStop at ' + pokestop.latitude + ', ' + pokestop.longitude + " was " + status[parseInt(response.result)]);
+                    response.items_awarded.forEach((item) => {
                         item.item_name = ItemList[item.item_id]; 
-                        self.logger.info('[s] Get item: ' + item.item_id);
+                        self.logger.info('[s] Get item: ' + item.item_name);
                     });
-                    self.io.emit('collected', { items: gfResponse.items_awarded });
+                    self.io.emit('collected', { items: response.items_awarded });
                 }
-                else if (gfResponse.result == 3) {
+                else if (response.result == 3 || response.result == 4) {
                     self.collectedPokeStops.push({ pokeStop: pokestop, timestamp: new Date() });                    
                 }
-                resolve({ status: parseInt(gfResponse.result), message: status[parseInt(gfResponse.result)] });
-            }).catch((err) => {
-                reject(err);
+                resolve({ status: parseInt(response.result), message: status[parseInt(response.result)] });
             });
+            return null;
         });
     }
 
     self.catchPokemon = function (pokemon) {
         return new Promise(function(resolve, reject) {
-            Pokeio.EncounterPokemonAsync(pokemon).then((data) => {
-                // if data is 'No result', this means we get nothing from the server
-                if (data == 'No result') {
-                    reject(new Error(data));
+            self.client.encounter(pokemon.encounter_id, pokemon.spawn_point_id).then(eResponse => {
+                // if eResponse is 'No result', this means we get nothing from the server
+                if (eResponse == 'No result') {
+                    reject(new Error(eResponse));
                 }
                 // else, encounter successful. time to throwing balls... :3
                 else {
+                    self.logger.info('[e] Encounter ' + pokemon.data.name + '...');
                     setTimeout(() => {
                         var ball = Settings.ball;
-                        for (i = ball; i < 5; i++) {
-                            var item = self.character.items.find((element) => {
-                                return element.item == i
+                        for (let i = ball; i < 5; i++) {
+                            var item = self.character.items.find(element => {
+                                return element.item_id == i
                             });
                             if (typeof(item) == 'undefined') {
                                 ball = 5;
@@ -348,88 +406,242 @@ var PokeGoWorker = function () {
                                 break;
                             }
                         }
-                        if (ball < 5) {
-                            Pokeio.CatchPokemonAsync(data.WildPokemon, 1, 1.950, 1, ball).then((final) => {
-                                // if data is 'No result', this means we get nothing from the server
-                                if (data == 'No result') {
-                                    reject(new Error(data));
+                        if (ball < 5 && eResponse.wild_pokemon) {
+                            self.client.catchPokemon(eResponse.wild_pokemon.encounter_id, ball, 1.950, eResponse.wild_pokemon.spawn_point_id, true, 1, 1).then(cResponse => {
+                                // if cResponse is 'No result', this means we get nothing from the server
+                                if (cResponse == 'No result') {
+                                    reject(new Error(cResponse));
                                 }
                                 // else, catch request successful. parse the result
                                 var status = ['Unexpected error', 'Successful catch', 'Catch Escape', 'Catch Flee', 'Missed Catch'];
-                                if(final.Status == null) {
-                                    self.logger.info('[x] Error: You have no more of that ball left to use!');
+                                if(cResponse.status == null) {
+                                    self.logger.info('[c] Error: You have no more of that ball left to use!');
                                 } else {
-                                    data.WildPokemon.data = PokemonList[data.WildPokemon.pokemon.PokemonId - 1];
-                                    self.logger.info('[s] Catch status for ' + data.WildPokemon.data.name + ': ' + status[parseInt(final.Status)]);
-                                    if (final.Status == 1) {
+                                    eResponse.wild_pokemon.data = PokemonList[eResponse.wild_pokemon.pokemon_data.pokemon_id - 1];
+                                    self.logger.info('[c] Catch status for ' + eResponse.wild_pokemon.data.name + ': ' + status[parseInt(cResponse.status)]);
+                                    if (cResponse.status == 1) {
                                         var pm = self.character.captives.find((pm) => {
-                                            return pm.data.id == data.WildPokemon.data.id;
+                                            return pm.data.id == eResponse.wild_pokemon.data.id;
                                         });
                                         if (typeof(pm) == 'undefined') {
-                                            data.WildPokemon.count = 1;
-                                            self.character.captives.push(data.WildPokemon);
+                                            eResponse.wild_pokemon.count = 1;
+                                            self.character.captives.push(eResponse.wild_pokemon);
                                         }
                                         else {
                                             pm.count = pm.count + 1;
                                         }
-                                        self.logger.info('Captured ' + data.WildPokemon.data.name + ' at ' + data.WildPokemon.Latitude + ', ' + data.WildPokemon.Longitude + ', at ' + dateFormat(new Date(), "yyyy-mm-dd h-MM-ss"));
-                                        self.io.emit('captured', { pokemon: data.WildPokemon });
+                                        self.logger.info('[s] Captured ' + eResponse.wild_pokemon.data.name + ' at ' + eResponse.wild_pokemon.latitude + ', ' + eResponse.wild_pokemon.longitude + ', at ' + dateFormat(new Date(), "yyyy-mm-dd h-MM-ss"));
+                                        self.io.emit('captured', { pokemon: eResponse.wild_pokemon });
                                     }
                                 }
-                                resolve({ status: parseInt(final.Status), message: status[parseInt(final.Status)] });
-                            }).catch((err) => {
-                                reject(err);
+                                resolve({ status: parseInt(cResponse.Status), message: status[parseInt(cResponse.Status)] });
                             });
+                            return null;
                         }
                         else {
                             resolve();
                         }
-                    }, 2000);
+                    }, 3000);
                 }
                 return null;
-            }).catch((err) => {
-                reject(err);
             });
+            return null;
         });
     }
 
     self.moveCharacter = function () {
-        return new Promise(function(resolve, reject) {
-            if (Settings.movement == "random") {
-                // if we don't have any destination, create one..
-                if (!self.destination) {
-                    self.destination = self.getRandomLocation(Settings.centerLatitude, Settings.centerLongitude, Settings.radius);
-                }
+        if (Settings.movement == "random") {
+            // if we don't have any destination, create one..
+            if (!self.destination) {
+                self.destination = self.getRandomLocation(Settings.centerLatitude, Settings.centerLongitude, Settings.radius);
+            }
 
+            if (self.io) {
+                self.io.emit('destination', { destination: self.destination });
+            }
+
+            // move to our destination bit by bit. calculate bearing and new step coordinate
+            var bearing = self.calculateBearing(self.character.location, self.destination);
+            var nextStep = Geolib.computeDestinationPoint(self.character.location, Settings.step, bearing);
+
+            // if the distance between next step and destination is less than step, remove destination
+            if (Geolib.getDistance(self.destination, nextStep) <= Settings.step) {
+                self.destination = null;
                 if (self.io) {
                     self.io.emit('destination', { destination: self.destination });
                 }
+            }
 
-                // move to our destination bit by bit. calculate bearing and new step coordinate
-                var bearing = self.calculateBearing(self.character.location, self.destination);
-                var nextStep = Geolib.computeDestinationPoint(self.character.location, Settings.step, bearing);
-
-                // if the distance between next step and destination is less than step, remove destination
-                if (Geolib.getDistance(self.destination, nextStep) <= Settings.step) {
-                    self.destination = null;
-                    if (self.io) {
-                        self.io.emit('destination', { destination: self.destination });
-                    }
+            // step the character
+            var location = {
+                type: 'coords',
+                coords: {
+                    latitude: nextStep.latitude,
+                    longitude: nextStep.longitude,
+                    altitude: 0
                 }
+            };
+            self.client.setPosition(location.coords.latitude, location.coords.longitude);
+            self.character.location = location.coords;
+            self.logger.info('[m] Move to ' + location.coords.latitude + ', ' + location.coords.longitude);
+        }
+    }
 
-                // step the character
-                var location = {
-                    type: 'coords',
-                    coords: {
-                        latitude: nextStep.latitude,
-                        longitude: nextStep.longitude,
-                        altitude: 0
-                    }
+    self.heartbeat = function () {
+        return new Promise(function(resolve, reject) {
+            if(self.started && self.doLoop) {
+                // init heartbeat object
+                self.hbData = {
+                    location: self.character.location,
+                    pokeStops: [],
+                    gyms: [],
+                    catchablePokemons: [],
+                    nearbyPokemons: [],
+                    wildPokemons: []
                 };
-                Pokeio.SetLocationAsync(location).then(function(finalStep) {
-                    self.character.location = finalStep;
-                    resolve();
+                var cellIDs = pogobuf.Utils.getCellIDs(self.client.playerLatitude, self.client.playerLongitude);
+                // var cellIDs = utils.getCellIDs(self.client.playerLatitude, self.client.playerLongitude);
+                self.logger.info('[o] ------------');
+                self.logger.info('[o] Get heartbeat...');
+                return Promise.resolve(self.client.getMapObjects(cellIDs, Array(cellIDs.length).fill(0))).then(mapObjects => {
+                    self.logger.info('[o] parsing...');
+                    return mapObjects.map_cells;
+                }).each(cell => {
+                    // parse forts
+                    Promise.resolve(cell.forts).each(fort => {
+                        if (fort.type == 1) {
+                            var ps = self.collectedPokeStops.find((ps) => {
+                                return ps.pokeStop.id == fort.id;
+                            });
+                            if (typeof(ps) != 'undefined') {
+                                fort.enabled = false;
+                            }
+                            self.hbData.pokeStops.push(fort);
+                        }
+                        else {
+                            self.hbData.gyms.push(fort);
+                        }
+                        return null;
+                    });
+                
+                    // parse catchable pokemons
+                    Promise.resolve(cell.catchable_pokemons).each(pokemon => {
+                        pokemon.data = PokemonList[parseInt(pokemon.pokemon_id) - 1];
+                        self.hbData.catchablePokemons.push(pokemon);
+                        return null;
+                    });
+
+                    // parse nearby pokemons
+                    Promise.resolve(cell.nearby_pokemons).each(pokemon => {
+                        pokemon.data = PokemonList[parseInt(pokemon.pokemon_id) - 1];
+                        self.hbData.nearbyPokemons.push(pokemon);
+                        return null;
+                    });
+
+                    // parse wild pokemons
+                    Promise.resolve(cell.wild_pokemons).each(pokemon => {
+                        pokemon.data = PokemonList[parseInt(pokemon.pokemon_data.pokemon_id) - 1];
+                        self.hbData.wildPokemons.push(pokemon);
+                        return null;
+                    });
+
                     return null;
+                }).then(() => {
+                    if (self.io) {
+                        // post heartbeat event
+                        self.io.emit('heartbeat', { heartbeat: self.hbData });
+                    }
+                    //utils.test();
+                    self.logger.info('[o] processing...');
+
+                    // process nearby, collectable pokeStops
+                    if (Settings.collect && self.doLoop && self.character.totalItems < self.character.itemStorage) {
+                        self.doLoop = false;
+                        var found = false;
+                        for (let i = 0; i < self.hbData.pokeStops.length; i++) {
+                            var pokeStop = self.hbData.pokeStops[i];
+                            // if enabled
+                            if (pokeStop.enabled) {
+                                // and close enough to collect
+                                var distance = Geolib.getDistance(self.character.location, {
+                                    latitude: pokeStop.latitude,
+                                    longitude: pokeStop.longitude
+                                });
+                                if (distance <= 40) {
+                                    found = true;
+                                    // collect item from this pokestop
+                                    self.collectPokeStop(pokeStop).finally(() => {
+                                        self.doLoop = true;
+                                    });
+                                    break;
+                                }
+                            }
+                        }
+                        // no collectable pokestops. continue the loop
+                        if (!found) {
+                            self.doLoop = true;
+                        }
+                    }
+
+                    // process wild pokemons
+                    self.hbData.catchablePokemons.forEach(pokemon => {
+                        self.logger.info('[+] There is a catchable ' + pokemon.data.name + ' -  ' + parseInt(pokemon.expiration_timestamp_ms) / 1000 + ' seconds until hidden.');
+                    });
+
+                    // catching the first wild pokemon available
+                    if (Settings.encounter && self.doLoop) {
+                        self.doLoop = false;
+                        if (self.hbData.catchablePokemons.length > 0) {
+                            var shouldCatch = false;
+
+                            if (Settings.target == "all") {
+                                shouldCatch = true;
+                            }
+                            else if (Settings.target == "except") {
+                                for (let i = self.hbData.catchablePokemons.length - 1; i >= 0; i--) {
+                                    var pokemon = self.hbData.catchablePokemons[i];
+                                    var target = self.specificTargets.find((element) => {
+                                        return element.id == pokemon.data.id;
+                                    });
+                                    if (typeof(target) != 'undefined') {
+                                        self.hbData.catchablePokemons.splice(i, 1);
+                                    }
+                                }
+                            }
+                            else if (Settings.target == "only") {
+                                for (let i = self.hbData.catchablePokemons.length - 1; i >= 0; i--) {
+                                    var pokemon = self.hbData.catchablePokemons[i];
+                                    var target = self.specificTargets.find((element) => {
+                                        return element.id == pokemon.data.id;
+                                    });
+                                    if (typeof(target) == 'undefined') {
+                                        self.hbData.catchablePokemons.splice(i, 1);
+                                    }
+                                }
+                            }
+
+                            self.catchPokemon(self.hbData.catchablePokemons[0]).then(result => {
+                                return self.getTrainerInformation().then(() => {
+                                    self.doLoop = true;
+                                });
+                            }).catch((err) => {
+                                self.doLoop = true;
+                            });
+                        }
+                        else {
+                            self.doLoop = true;
+                        }
+                    }
+
+                    // move the character
+                    if (self.doLoop) {
+                        self.moveCharacter();
+                    }
+
+                    self.logger.info('[o] Heartbeat done.');
+                    // resolve();
+                }).catch(err => {
+                    self.logger.error(err);
                 });
             }
             else {
@@ -443,249 +655,42 @@ var PokeGoWorker = function () {
         self.started = true;
         self.logger.info('[o] -> Started!');
 
-        // build initial location data
-        var location = {
-            type: Settings.centerType,
-            name: Settings.centerName,
-            coords: {
-                latitude: Settings.centerLatitude,
-                longitude: Settings.centerLongitude,
-                altitude: Settings.centerAltitude
+        // only accept ptc or google
+        if (Settings.provider !== 'ptc' && Settings.provider !== 'google') {
+            self.logger.error('[x] -> Invalid provider! Exiting...');
+            return new Error('Invalid provider');
+        }
+
+        // get respective login
+        if (Settings.provider == 'ptc') {
+            self.login = new pogobuf.PTCLogin();
+        }
+        else {
+            self.login = new pogobuf.GoogleLogin();
+        }
+
+        // do login
+        self.client = new pogobuf.Client();
+        self.login.login(Settings.username, Settings.password)
+        .then(token => {
+            if (Settings.provider == 'ptc') {
+                self.client.setAuthInfo('ptc', token);
             }
-        };
-
-        // init client login
-        Pokeio.initAsync(Settings.username, Settings.password, location, Settings.provider).then(() => {
-            // get profile
-            Pokeio.GetProfileAsync().then((profile) => {
-                // set character data
-                self.formatPlayerCard(profile);
-
-                // loop until user says stop
-                self.doLoop = true;
-                var loopInterval = setInterval(function() {
-                    return new Promise(function(resolve, reject) {
-                        if(self.started && self.doLoop) {
-                            // call heartbeat
-                            Pokeio.HeartbeatAsync().then((heartbeat) => {
-                                self.logger.info('[+] ------------');
-                                self.logger.info('[+] Heartbeat:');
-                                
-                                // init object
-                                var hbData = {
-                                    location: self.character.location,
-                                    pokeStops: [],
-                                    gyms: [],
-                                    mapPokemons: [],
-                                    nearbyPokemons: [],
-                                    wildPokemons: []
-                                };
-
-                                //remove all stored pokestops older than 5 minutes
-                                var currentTimestamp = new Date();
-                                for (i = self.collectedPokeStops.length - 1; i >= 0; i--) {
-                                    var storedStop = self.collectedPokeStops[i];
-                                    if (Math.floor((Math.abs(currentTimestamp - storedStop.timestamp)/1000)/60) > 5) {
-                                        self.collectedPokeStops.splice(i, 1);
-                                    }
-                                }
-
-                                // loop to get the values
-                                heartbeat.cells.forEach(function(cell) {
-                                    // parse forts
-                                    if (cell.Fort.length > 0) {
-                                        cell.Fort.forEach(function(fort) {
-                                            if (fort.FortType == 1) {
-                                                var ps = self.collectedPokeStops.find((ps) => {
-                                                    return ps.pokeStop.FortId == fort.FortId;
-                                                });
-                                                if (typeof(ps) != 'undefined') {
-                                                    fort.Enabled = false;
-                                                }
-                                                hbData.pokeStops.push(fort);
-                                            }
-                                            else {
-                                                hbData.gyms.push(fort);
-                                            }
-                                        });
-                                    }
-                                
-                                    // parse map pokemons
-                                    if (cell.MapPokemon.length > 0) {
-                                        cell.MapPokemon.forEach(function(pokemon) {
-                                            pokemon.data = PokemonList[parseInt(pokemon.PokedexTypeId) - 1];
-                                            hbData.mapPokemons.push(pokemon);
-                                        });
-                                    }
-
-                                    // parse nearby pokemons
-                                    if (cell.NearbyPokemon.length > 0) {
-                                        cell.NearbyPokemon.forEach((pokemon) => {
-                                            pokemon.data = PokemonList[parseInt(pokemon.PokedexNumber) - 1];
-                                            hbData.nearbyPokemons.push(pokemon);
-                                        });
-                                    }
-
-                                    // parse wild pokemons
-                                    if (cell.WildPokemon.length > 0) {
-                                        cell.WildPokemon.forEach((pokemon) => {
-                                            pokemon.data = PokemonList[parseInt(pokemon.pokemon.PokemonId) - 1];
-                                            hbData.wildPokemons.push(pokemon);
-                                        });
-                                    }
-                                });
-
-                                // post heartbeat event
-                                self.io.emit('heartbeat', { heartbeat: hbData });
-
-                                // process nearby, collectable pokeStops
-                                if (Settings.collect && self.doLoop && self.character.totalItems < self.character.itemStorage) {
-                                    self.doLoop = false;
-                                    var found = false;
-                                    for (i = 0; i < hbData.pokeStops.length; i++) {
-                                        var pokeStop = hbData.pokeStops[i];
-                                        // if enabled
-                                        if (pokeStop.Enabled) {
-                                            // and close enough to collect
-                                            var distance = Geolib.getDistance(self.character.location, {
-                                                latitude: pokeStop.Latitude,
-                                                longitude: pokeStop.Longitude
-                                            });
-                                            if (distance <= 35) {
-                                                found = true;
-                                                // collect item from this pokestop
-                                                self.collectPokeStop(pokeStop).then((result) => {
-                                                    self.doLoop = true;
-                                                }).catch((err) => {
-                                                    self.doLoop = true;
-                                                });
-                                                // currently there are no api available for this. so... skip it
-                                                // self.doLoop = true;
-                                                break;
-                                            }
-                                        }
-                                    }
-                                    // no collectable pokestops. continue the loop
-                                    if (!found) {
-                                        self.doLoop = true;
-                                    }
-                                }
-
-                                // process nearby pokemons
-                                hbData.nearbyPokemons.forEach((pokemon) => {
-                                    self.logger.info('[+] There is a nearby ' + pokemon.data.name + ' at approximate ' + parseInt(pokemon.DistanceMeters) + ' meters.');
-                                });
-
-                                // process map pokemons - well... we don't. It seems that every map pokemons are also exist on wild pokemons
-                                // hbData.mapPokemons.forEach((pokemon) => {
-                                //     self.logger.info('[+] There is a catchable ' + pokemon.data.name + ' - lured by lure module.');
-                                // });
-
-                                // process wild pokemons
-                                hbData.wildPokemons.forEach((pokemon) => {
-                                    self.logger.info('[+] There is a catchable ' + pokemon.data.name + ' -  ' + parseInt(pokemon.TimeTillHiddenMs) / 1000 + ' seconds until hidden.');
-                                });
-
-                                // catching the first wild pokemon available
-                                if (Settings.encounter && self.doLoop) {
-                                    self.doLoop = false;
-                                    if (hbData.wildPokemons.length > 0) {
-                                        var shouldCatch = false;
-
-                                        if (Settings.target == "all") {
-                                            shouldCatch = true;
-                                        }
-                                        else if (Settings.target == "except") {
-                                            for (i = hbData.wildPokemons.length - 1; i >= 0; i--) {
-                                                var pokemon = hbData.wildPokemons[i];
-                                                var target = self.specificTargets.find((element) => {
-                                                    return element.id == pokemon.data.id;
-                                                });
-                                                if (typeof(target) != 'undefined') {
-                                                    hbData.wildPokemons.splice(i, 1);
-                                                }
-                                            }
-                                        }
-                                        else if (Settings.target == "only") {
-                                            for (i = hbData.wildPokemons.length - 1; i >= 0; i--) {
-                                                var pokemon = hbData.wildPokemons[i];
-                                                var target = self.specificTargets.find((element) => {
-                                                    return element.id == pokemon.data.id;
-                                                });
-                                                if (typeof(target) == 'undefined') {
-                                                    hbData.wildPokemons.splice(i, 1);
-                                                }
-                                            }
-                                        }
-
-                                        self.catchPokemon(hbData.wildPokemons[0]).then((data) => {
-                                            Pokeio.GetProfileAsync().then((profile) => {
-                                                // set character data
-                                                self.formatPlayerCard(profile);
-                                                self.doLoop = true;
-                                            }).catch((err) => {
-                                                self.doLoop = true;
-                                            });
-                                        }).catch((err) => {
-                                            self.doLoop = true;
-                                        });
-                                    }
-                                    else {
-                                        self.doLoop = true;
-                                    }
-                                }
-
-                                // // move the character
-                                if (self.doLoop) {
-                                    self.doLoop = false;
-                                    self.moveCharacter().then(() => {
-                                        self.doLoop = true;
-                                    }).catch((err) => {
-                                        self.doLoop = true;
-                                    });
-                                }
-
-                                resolve('[+] Heartbeat done.')
-                            }).catch((err) => {
-                                self.doLoop = true;
-                                resolve(err);
-                            });
-                        } else {
-                            resolve('[p] Looping stalled to complete execution of task..');
-                        }
-                    }).then((a) => {
-                        if (typeof(a) == Error) {
-                            self.logger.info(a.message);
-                            if (a.message == 'No result') {
-                                // log this error timestamp. Longer than 1 minute, reset the counter.
-                                if (!self.noResultLastOccurence || Math.floor((Math.abs(currentTimestamp - storedStop.timestamp)/1000)/60) > 1) {
-                                    self.noResultCounter = 0;
-                                }
-                                // less than 1 minute, increment the counter.
-                                else {
-                                    self.noResultCounter = self.noResultCounter + 1;
-                                }
-                                // when reaching 10 consecutive error of 'No result', this bot need to reset
-                                if (self.noResultCounter >= 10) {
-                                    clearInterval(loopInterval);
-                                    setTimeout(() => {
-                                        self.start();
-                                    }, 2000);
-                                }
-                            }
-                        }
-                        else {
-                            self.logger.info(a);
-                        }
-                    });
-                }, Settings.loopInterval);
-            })
-            .catch((err) => {
-                self.doLoop = true;
-            });
-        })
-        .catch((err) => {
+            else {
+                self.client.setAuthInfo('google', token);
+            }
+            self.client.setPosition(Settings.centerLatitude, Settings.centerLongitude);
+            self.character.location = { latitude: Settings.centerLatitude, longitude: Settings.centerLongitude };
+            return self.client.init();
+        }).then(() => {
+            return self.getTrainerInformation();
+        }).then(() => {
+            // initial trainer data was obtained. now start the loop
             self.doLoop = true;
+            var loopInterval = setInterval(function() {
+                self.heartbeat();
+            }, Settings.loopInterval);
+            return null;
         });
     }
 }
