@@ -22,7 +22,7 @@
     "mongo-connect": "0.0.6",
     "morgan": "~1.6.1",
     "node-pogo-signature": "^2.0.0",
-    "pogobuf": "^1.4.0",
+    "pogobuf": "^1.5.0",
     "rand-token": "^0.2.1",
     "serve-favicon": "~2.3.0",
     "socket.io": "^1.4.8"
