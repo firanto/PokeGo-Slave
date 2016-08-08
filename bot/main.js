@@ -10,9 +10,6 @@ const Long = require('long');
 const pogobuf = require('pogobuf');
 const POGOProtos = require('node-pogo-protos');
 
-// temporary requirement
-const utils = require('./utils.js');
-
 // load settings data
 const PokemonList = JSON.parse(fs.readFileSync(__dirname + '/pokemons.json', 'utf8')).pokemon;
 const ItemList = JSON.parse(fs.readFileSync(__dirname + '/items.json', 'utf8'));
