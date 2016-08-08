@@ -7,7 +7,6 @@ const log4js = require('log4js');
 const fs = require('fs');
 const Long = require('long');
 
-const Pokeio = Promise.promisifyAll(require('pokemon-go-node-api'));
 const pogobuf = require('pogobuf');
 const POGOProtos = require('node-pogo-protos');
 
