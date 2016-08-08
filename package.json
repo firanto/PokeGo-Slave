@@ -1,6 +1,6 @@
 {
-  "name": "PokeGoScanner.Express",
-  "version": "0.31.1",
+  "name": "pokego-slave",
+  "version": "0.40.0",
   "private": true,
   "scripts": {
     "start": "node ./bin/www"
@@ -17,10 +17,12 @@
     "express-session": "^1.14.0",
     "geolib": "^2.0.21",
     "log4js": "^0.6.38",
+    "long": "^3.2.0",
     "minimatch": "^3.0.2",
     "mongo-connect": "0.0.6",
     "morgan": "~1.6.1",
-    "pokemon-go-node-api": "^1.4.0",
+    "node-pogo-signature": "^2.0.0",
+    "pogobuf": "^1.4.0",
     "rand-token": "^0.2.1",
     "serve-favicon": "~2.3.0",
     "socket.io": "^1.4.8"
