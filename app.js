@@ -34,7 +34,7 @@ var io = require('socket.io')(3100);
 
 // handle socket.io connection. store the socket referenced by user id.
 io.sockets.on('connection', function (socket) {
-    socket.emit('character', { character: bot.character });
+    socket.emit('character', { character: bot.character, hatchedInfo: [] });
     socket.emit('barriers', { barriers: bot.generateBarrier() });
 });
 
