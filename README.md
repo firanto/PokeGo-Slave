@@ -9,10 +9,9 @@ Use it as you see fit. I do not held any responsibility of this project usage.
 # How to use
 ## Prerequisites:
 1. Make sure you have Node.js and npm installed.
-2. Also make sure you have node-gyp prerequisites installed. For information for your system, go here https://github.com/nodejs/node-gyp
-3. Clone this project.
-4. Navigate to it's root directory.
-5. Run 'npm install' to install depencencies. Note that the api I use need s2geometry-node which has native codes. This can cause installation issue. Make sure to read point #2 and Additional information below.
+2. Clone this project.
+3. Navigate to it's root directory.
+4. Run 'npm install' to install depencencies.
 
 ## Usage:
 1. Edit ./bot/Settings.json as you see fit. The guide are bellow this section. 
@@ -28,7 +27,6 @@ Here are the settings' explanation:
 - centerName : Fill your center location name, e.g: "Central Park". You can omit or use empty string if your type is "coords".
 - centerLatitude : Your center's latitude.
 - centerLongitude : Your center's longitude.
-- centerAltitude : Your center's altitude. I usually just use 0.. :3
 - radius : Your operation radius. Your character will not walking outside of this circle.
 - loopInterval: Your operation interval in milliseconds. 4000 should be safe for now. Less than that, I'm pretty sure they will throttle you.
 - autoCleanPokemon: Define whether you want to clean your pokemon storage by transferring duplicates.
@@ -49,29 +47,37 @@ That's it. :3
 - [X] Auto-walk using random coordinate to hatch eggs
 - [X] Catch Nearby Pokemon automatically
 - [X] Use Normal/Super/Great Pokeballs... (need a rework to cascade usages)
-- [X] Pokemon automatic transfer (user can limit number of possession. Pokemon with lowest CP will be transfered first)
 - [X] Display Avatar on map
 - [X] Display Avatar's destination on map
 - [X] Update Avatar position when walking
 - [X] Display pokestops on map. Including active lure and collected state (purple color)
 - [X] Display gyms on map
 - [X] Display catchable pokemon on map
+- [X] Pokemon automatic transfer (user can limit number of possession. Pokemon with lowest CP will be transfered first)
 - [X] Pokemon catch filter. Can be 'all', 'except', or 'only'
+- [X] Incubate eggs
 - [ ] Enable/disable auto-walk from UI
 - [ ] Double click map to set trainer location.
 - [ ] Drop items when bag is full. I think this should be done manually from UI.
-- [ ] Incubate eggs
 
 ## Considered, but not primary target
 - [ ] Evolve pokemon
 - [ ] Use candy
 
-# Additional information
+# Additional information (deprecated)
+Update: I don't use native codes for now (both s2-geometry and u6 implementation is pure javascript). This repo should be platform agnostic for the time being.
+
 Regarding s2geometry-node issue (specially in Windows), just make sure you have install the build tools at the link above. 
 If your still have error on building it, try update your npm with 'npm install -g npm@next' with Administrator credentials.
 
 # Dependency
-This poject use api which can be found [here](https://github.com/cyraxx/pogobuf)
+This poject use API which can be found [here](https://github.com/cyraxx/pogobuf)
+The API has dependency to [node-pogo-signature](https://github.com/SpencerSharkey/node-pogo-signature).
 
 ### Thanks to:
-Thanks to [Arm4x](https://github.com/Armax) who provide the node's verison of pokemon go api for us to learn which you can found [here](https://github.com/Armax/Pokemon-GO-node-api).
+[cyraxx](https://github.com/cyraxx) who develop the pogobuf.
+[Spencer](https://github.com/SpencerSharkey) who provide the dependency for u6 signature.
+Chris who transpile the signature from native c to javascript.
+Everyone at pkmngodev who provide the base api.
+
+And thanks to [Arm4x](https://github.com/Armax) who provide the node's verison of pokemon go api for me to learn how the API work which you can found [here](https://github.com/Armax/Pokemon-GO-node-api).

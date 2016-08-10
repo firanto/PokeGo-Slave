@@ -213,7 +213,7 @@
     <!-- storage/inventory -->
     <button id="storage-tab" class="btn">&lt;&lt;</button>
     <div id="storage-panel">
-        <div id="storage-panel-tab">Trainers Inventory</div>
+        <div id="storage-panel-tab">Trainer's Inventory</div>
         <div id="storage-panel-content">
             <table class="table table-condensed">
                 <tbody class="table-bordered">
@@ -232,7 +232,7 @@
 
             <!-- Nav tabs -->
             <ul class="nav nav-tabs" role="tablist">
-                <li role="presentation" class="active"><a href="#captives" aria-controls="captives" role="tab" data-toggle="tab">Captives</a></li>
+                <li role="presentation" class="active"><a href="#captives" aria-controls="captives" role="tab" data-toggle="tab">Captured</a></li>
                 <!--
                 <li role="presentation"><a href="#pokemons" aria-controls="pokemons" role="tab" data-toggle="tab">Pokemons</a></li>
                 -->
@@ -288,8 +288,8 @@
                             <tr>
                                 <td width="50" height="50"><img src="images/egg-40.png" width="40" height="40" /></td>
                                 <td>
-                                    <div style="height:40px; line-height: 40px; float:left;">Hatching: <span data-bind="text: egg_km_walked_start"></span>/<span data-bind="text: egg_km_walked_target"></span> km</div>
-                                    <div style="width:40px; height:40px; line-height: 40px; float:right;"><img data-bind="attr: { src: incubatedIcon, width: 20, height: 20 }"></img>
+                                    <div style="height:40px; line-height: 40px; float:left;">Hatching: <span data-bind="text: progress"></span>/<span data-bind="text: egg_km_walked_target"></span> km</div>
+                                    <div style="width:40px; height:40px; line-height: 40px; float:right;"><img data-bind="attr: { src: incubatedIcon, width: 40, height: 40 }"></img>
                                     </div>
                                 </td>
                             </tr>
@@ -301,6 +301,7 @@
                     <table class="table table-condensed table-striped">
                         <tbody class="table-bordered" data-bind="foreach: items">
                             <tr>
+                                <td width="50" height="50"><img data-bind="attr: { src: img, width: 40, height: 40 }" /></td>
                                 <td>
                                     <div style="width:100%;"><span data-bind="text: name"></span></div>
                                     <div style="width:100%;"><span>Count: </span><span data-bind="text: count"></span></div>
@@ -331,10 +332,10 @@
         <div class="modal-dialog modal-sm">
             <div class="modal-content nearby-item" style="padding-top: 20px; padding-bottom: 20px;width: 200px;">
                 <div style="height: 30px; line-height: 30px;"><span>Collected Items:</span></div>
-                <ul data-bind="foreach: lastCollectedItems">
+                <ul data-bind="foreach: lastCollectedItems" style="background-colo:#ddd;">
                     <li>
-                        <div class="collected-item" style="width:100%;">
-                            <span data-bind="text: item_name"></span>
+                        <div class="collected-item" style="width:100%; height: 50px;">
+                            <img data-bind="attr: { src: img, width: 40, height: 40 }" ><span data-bind="text: item_name"></span>
                         </div>
                     </li>
                 </ul>
@@ -345,8 +346,29 @@
     <div id="captured-modal" class="modal fade" tabindex="-1" role="dialog" aria-labelledby="mySmallModalLabel">
         <div class="modal-dialog modal-sm">
             <div class="modal-content text-center nearby-item" style="padding-top: 20px; padding-bottom: 20px;width: 200px;">
-                <div class="text-center" style="width:100%;"><span>Captured </span><span data-bind="text: latestCaptiveName"></span></div>
+                <div class="text-center" style="width:100%;"><span data-bind="text: latestCaptiveName"></span> <span>Captured</span></div>
                 <img data-bind="attr: { src: latestCaptiveImage }" />
+            </div>
+        </div>
+    </div>
+
+    <div id="hatched-modal" class="modal fade" tabindex="-1" role="dialog" aria-labelledby="mySmallModalLabel">
+        <div class="modal-dialog modal-sm">
+            <div class="modal-content text-center nearby-item" style="padding-top: 20px; padding-bottom: 20px;width: 200px;">
+                <div class="text-center" style="width:100%;">Hatched</div>
+                <table class="table table-condensed table-striped">
+                    <tbody class="table-bordered" data-bind="foreach: hatched">
+                        <tr>
+                            <td width="60" height="60"><img data-bind="attr: { src: pokemon.img, width: 40, height: 40 }" /></td>
+                            <td>
+                                <div><span data-bind="text: pokemon.name"></span></div>
+                                <div>Candy: <span data-bind="text: candy"></span></div>
+                                <div>Stardust: <span data-bind="text: stardust"></span></div>
+                                </div>
+                            </td>
+                        </tr>
+                    </tbody>
+                </table>
             </div>
         </div>
     </div>
@@ -406,6 +428,7 @@
         this.eggs = ko.observableArray();
         this.items = ko.observableArray();
         this.totalItems = ko.observable(0);
+        this.hatched = ko.observableArray();
     }
     var bindedData = new BindedData();
 
@@ -468,7 +491,7 @@
             data.character.eggs.forEach(egg => {
                 egg.incubatedIcon = ko.computed(() => {
                     if (egg.egg_incubator_id != '') {
-                        return 'images/egg-40.png';
+                        return 'images/egg-incubator-40.png';
                     }
                     else {
                         return 'images/empty.png';
@@ -477,7 +500,19 @@
             });
             bindedData.eggs(data.character.eggs);
             bindedData.totalItems(data.character.totalItems);
+            data.character.items.forEach(item => {
+                item.img = 'images/items/' + item.item_id + '.png';
+            });
             bindedData.items(data.character.items);
+
+            // hatched info
+            bindedData.hatched(data.hatchedInfo);
+            if (data.hatchedInfo.length > 0) {
+                $('#hatched-modal').modal('show');           
+                setTimeout(function(){
+                    $('#hatched-modal').modal('hide');
+                }, 5000);
+            }
         });
 
         // on cleaning up pokemons
@@ -497,6 +532,9 @@
         // on collect items
         socket.on('collected', function (data) {
             // do something to data.items (each item contain item_id)
+            data.items.forEach(item => {
+                item.img = ko.observable('images/items/' + item.item_id + '.png');
+            });
             alertCollectedItems(data.items);
         });
 
@@ -543,7 +581,7 @@
     function initMap() {
         map = new google.maps.Map(document.getElementById('google-map'), {
             center: { lat: <%=character.location.latitude;%>, lng: <%=character.location.longitude;%> },
-            zoom: 18
+            zoom: 17
         });
         
         playerMarker = new SlidingMarker({
@@ -661,12 +699,10 @@
     }
 
     function plotCapturedPokemon(pokemon) {
-        pokemon.marker = new SlidingMarker({
+        pokemon.marker = new google.maps.Marker({
             position: { lat: pokemon.latitude, lng: pokemon.longitude },
             icon: 'images/pokeball-40.png',
-            map: map,
-            duration: 1000,
-            easing: "easeOutExpo"
+            map: map
         });
         $('#captured-modal').modal('show');
         setTimeout(function(){
@@ -710,6 +746,7 @@
         // initialize progress modal dialog
         $('#collected-modal').modal({ backdrop: true, keyboard: true, show: false });
         $('#captured-modal').modal({ backdrop: true, keyboard: true, show: false });
+        $('#hatched-modal').modal({ backdrop: true, keyboard: true, show: false });
         $('#progress-modal').modal({ backdrop: 'static', keyboard: false, show: false });
 
         // init socket.io
@@ -720,21 +757,6 @@
 
         // init knockout
         ko.applyBindings(bindedData);
-
-        // $('#storage-tab').click(() => {
-        //     if (storageOpened) {
-        //         storageOpened = false;
-        //         $('#storage-tab').css('right', '0px');
-        //         $('#storage-panel').css('right', '-300px');
-        //         $('#google-map').css('width', '100%');
-        //     }
-        //     else {
-        //         storageOpened = true;
-        //         $('#storage-tab').css('right', '300px');
-        //         $('#storage-panel').css('right', '0px');
-        //         $('#google-map').css('width', 'calc(100% - 300px)');
-        //     }
-        // });
     });
 </script>
 

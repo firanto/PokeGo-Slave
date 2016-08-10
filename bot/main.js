@@ -46,6 +46,7 @@ var PokeGoWorker = function () {
 
     // run and loop state
     self.started = false;
+    self.restarting = false;
     self.doLoop = false;
 
     // character data
@@ -70,6 +71,7 @@ var PokeGoWorker = function () {
         pokemons: [],
         pokemonFamilies: [],
         eggs: [],
+        incubators: [],
         candies: [],
         items: [],
         captives: []
@@ -87,6 +89,8 @@ var PokeGoWorker = function () {
     self.destination = null;
     self.collectedPokeStops = [];
     self.transferingPokemons = [];
+    self.unusedIncubators = [];
+    self.slottedIncubators = [];
 
     self.transferSpecific = [];
     Settings.pokemonKeepSpecific.forEach(keep => {
@@ -175,7 +179,7 @@ var PokeGoWorker = function () {
                         hatchedInfo.push({
                             candy: hatched.candy_awarded[i],
                             experience: hatched.experience_awarded[i],
-                            pokemon: PokemonList[hatched.pokemon_id[i] - 1],
+                            pokemonId: hatched.pokemon_id[i],
                             stardust: hatched.stardust_awarded[i]
                         });
                     }
@@ -188,6 +192,9 @@ var PokeGoWorker = function () {
                 self.character.eggs.length = 0;
                 self.character.items.length = 0;
                 self.character.candies.length = 0;
+                self.character.incubators.length = 0;
+                self.unusedIncubators.length = 0;
+                self.slottedIncubators.length = 0;
                 inventories.forEach(inventory => {
                     let data = inventory.inventory_item_data;
                     if (data.player_stats) {
@@ -196,8 +203,9 @@ var PokeGoWorker = function () {
                         self.character.nextExperience = data.player_stats.next_level_xp.low;
                         self.character.kmWalked = data.player_stats.km_walked;
                     }
-                    if (data.pokemon_data) {
+                    else if (data.pokemon_data) {
                         if (data.pokemon_data.is_egg) {
+                            data.pokemon_data.progress = 0;
                             self.character.eggs.push(data.pokemon_data);
                         }
                         else {
@@ -206,22 +214,61 @@ var PokeGoWorker = function () {
                             self.character.pokemons.push(data.pokemon_data);
                         }
                     }
-                    if (data.item) {
+                    else if (data.egg_incubators) {
+                        self.character.incubators = data.egg_incubators.egg_incubator;
+                        self.character.incubators.forEach(incubator => {
+                            if (incubator.pokemon_id.equals(0)) {
+                                self.unusedIncubators.push(incubator.id);
+                            }
+                        });
+                    }
+                    else if (data.item) {
                         data.item.name = ItemList[data.item.item_id];
                         data.item.count = data.item.count != null ? data.item.count : 0; 
                         self.character.items.push(data.item);
                         itemCount = itemCount + data.item.count;
                     }
-                    if (data.candy) {
+                    else if (data.candy) {
                         self.character.candies.push({ familyId: data.candy.family_id, candy: data.candy.candy });
                     }
                 });
+                // set total items count
                 self.character.totalItems = itemCount;
+                
+                // sort pokemons
                 self.character.pokemons.sort((a, b) => {
                     return a.pokemon_id - b.pokemon_id || b.cp - a.cp;
                 });
+
+                // sort eggs
+                self.character.eggs.sort((a, b) => {
+                    return a.egg_km_walked_target - b.egg_km_walked_target || a.id - b.id;
+                });
+
+                // sort items
                 self.character.items.sort((a, b) => {
                     return a.item_id - b.item_id;
+                });
+
+                // calculate incubators
+                self.character.incubators.forEach(incubator => {
+                    // calculate progress
+                    let egg = self.character.eggs.find(element => {
+                        return element.id.equals(incubator.pokemon_id);
+                    });
+                    if (typeof(egg) != 'undefined') {
+                        egg.progress = Math.floor((self.character.kmWalked - incubator.start_km_walked) * 100) / 100;
+                    }
+                });
+
+                // assign hatcher pokemon
+                hatchedInfo.forEach(info => {
+                    let pokemon = self.character.pokemons.find(element => {
+                        return element.id.equals(info.pokemonId);
+                    });
+                    if (typeof(pokemon) != 'undefined') {
+                        info.pokemon = pokemon.data;
+                    }
                 });
 
                 if (self.io) {
@@ -237,11 +284,42 @@ var PokeGoWorker = function () {
                 self.logger.info('[o] -> Stardust: ' + self.character.stardust);
                 self.logger.info('[o] -> Pokemons: ' + self.character.pokemons.length + '/' + self.character.pokeStorage);
                 self.logger.info('[o] -> Items: ' + self.character.totalItems + '/' + self.character.itemStorage);
+                self.logger.info('[o] -> Km walked: ' + self.character.kmWalked + ' km');
                 self.logger.info('[o] -> location lat:' + self.character.location.latitude + ' lng: ' + self.character.location.longitude);
 
+                self.logger.info('[h] -> Hatched: ' + hatchedInfo.length + ' eggs');
                 hatchedInfo.forEach(element => {
-                    self.logger.info('[o] -> Hatched: ' + element.stardust);
+                    self.logger.info('[h] -> Hatched: ' + element.pokemon.name + ', candy: ' + element.candy + ', stardust: ' + element.stardust);
                 });
+
+                // incubate if incubator available
+                if (self.unusedIncubators.length > 0) {
+                    self.logger.info('[h] -> Scheduling egg incubation...');
+                }
+                var incubateTimeMultiplier = 1;
+                while (self.unusedIncubators.length > 0) {
+                    setTimeout(function() {
+                        let egg = self.character.eggs.find(element => {
+                            return element.egg_incubator_id == '';
+                        });
+                        self.client.useItemEggIncubator(self.slottedIncubators[0], egg.id).then(response => {
+                            let status = ['Unset', 'Success', 'Incubator not found', 'Egg not found', 'Pokemon id not egg', 'Incubator in use', 'Egg already incubated', 'Incubator has no remaining use'];
+                            if (response.result == 1) {
+                                self.logger.info('[h] -> Incubating: ' + egg.egg_km_walked_target + 'km egg');
+                            }
+                            else {
+                                self.logger.info('[h] -> Incubation failed: ' + status[parseInt(response.result)]);
+                            }
+                        }).catch(err => {
+                            self.verifyErrorRestart(err);
+                        });
+                        self.slottedIncubators.splice(0, 1);
+                        self.character.eggs.splice(self.character.eggs.indexOf(egg), 1);
+                    }, 3000 * incubateTimeMultiplier);
+                    self.slottedIncubators.push(self.unusedIncubators[0]);
+                    self.unusedIncubators.splice(0, 1);
+                    incubateTimeMultiplier = incubateTimeMultiplier + 1;
+                }
 
                 if (self.initialCleanup) {
                     self.initialCleanup = false;
@@ -249,7 +327,7 @@ var PokeGoWorker = function () {
                     // schedule auto-clean every 30 minutes
                     setInterval(() => {
                         self.cleaningPokemon();
-                    }, 1800000);
+                    }, 600000);
                 }
                 resolve();
             }).catch(err => {
@@ -317,7 +395,7 @@ var PokeGoWorker = function () {
                                         }
                                         resolve();
                                     }).catch((err) => {
-                                        console.log(err);
+                                        self.logger.error(err);
                                         reject(err);
                                     });
                                 }
@@ -325,7 +403,7 @@ var PokeGoWorker = function () {
                                     resolve();
                                 }
                             }).catch((err) => {
-                                console.log(err);
+                                self.verifyErrorRestart(err);
                             });
                         }
                         else {
@@ -338,6 +416,8 @@ var PokeGoWorker = function () {
                         }
                     }).then((a) => {
                         return null;
+                    }).catch(err => {
+                        self.verifyErrorRestart(err);
                     });
                 }, 5000);
             }
@@ -470,16 +550,13 @@ var PokeGoWorker = function () {
 
             // step the character
             var location = {
-                type: 'coords',
-                coords: {
                     latitude: nextStep.latitude,
-                    longitude: nextStep.longitude,
-                    altitude: 0
+                    longitude: nextStep.longitude
                 }
             };
-            self.client.setPosition(location.coords.latitude, location.coords.longitude);
-            self.character.location = location.coords;
-            self.logger.info('[m] Move to ' + location.coords.latitude + ', ' + location.coords.longitude);
+            self.client.setPosition(location.latitude, location.longitude);
+            self.character.location = location;
+            self.logger.info('[m] Move to ' + location.latitude + ', ' + location.longitude);
         }
     }
 
@@ -553,6 +630,8 @@ var PokeGoWorker = function () {
                     // process nearby, collectable pokeStops
                     if (Settings.collect && self.doLoop && self.character.totalItems < self.character.itemStorage) {
                         self.doLoop = false;
+                        if (process.env.NODE_ENV == 'development')
+                            console.log('loop paused for collecting items.');
                         var found = false;
                         for (let i = 0; i < self.hbData.pokeStops.length; i++) {
                             var pokeStop = self.hbData.pokeStops[i];
@@ -566,8 +645,16 @@ var PokeGoWorker = function () {
                                 if (distance <= 40) {
                                     found = true;
                                     // collect item from this pokestop
-                                    self.collectPokeStop(pokeStop).finally(() => {
+                                    self.collectPokeStop(pokeStop).then(() => {
+                                        return self.getTrainerInformation().then(() => {
+                                            self.doLoop = true;
+                                            if (process.env.NODE_ENV == 'development')
+                                                console.log('loop continued after collecting.');
+                                        });
+                                    }).catch(err => {
                                         self.doLoop = true;
+                                        if (process.env.NODE_ENV == 'development')
+                                            console.log('loop continued after failed collecting.');
                                     });
                                     break;
                                 }
@@ -576,6 +663,8 @@ var PokeGoWorker = function () {
                         // no collectable pokestops. continue the loop
                         if (!found) {
                             self.doLoop = true;
+                            if (process.env.NODE_ENV == 'development')
+                                console.log('loop continued with no pokestop to collect.');
                         }
                     }
 
@@ -587,6 +676,8 @@ var PokeGoWorker = function () {
                     // catching the first wild pokemon available
                     if (Settings.encounter && self.doLoop) {
                         self.doLoop = false;
+                        if (process.env.NODE_ENV == 'development')
+                            console.log('loop paused for encountering.');
                         if (self.hbData.catchablePokemons.length > 0) {
                             var shouldCatch = false;
 
@@ -616,16 +707,29 @@ var PokeGoWorker = function () {
                                 }
                             }
 
-                            self.catchPokemon(self.hbData.catchablePokemons[0]).then(result => {
-                                return self.getTrainerInformation().then(() => {
+                            if (self.hbData.catchablePokemons.length > 0) {
+                                self.catchPokemon(self.hbData.catchablePokemons[0]).then(result => {
+                                    return self.getTrainerInformation().then(() => {
+                                        self.doLoop = true;
+                                        if (process.env.NODE_ENV == 'development')
+                                            console.log('loop continued after catching success.');
+                                    });
+                                }).catch((err) => {
                                     self.doLoop = true;
+                                    if (process.env.NODE_ENV == 'development')
+                                        console.log('loop continued after catching failed.');
                                 });
-                            }).catch((err) => {
+                            }
+                            else {
                                 self.doLoop = true;
-                            });
+                                if (process.env.NODE_ENV == 'development')
+                                    console.log('loop continued with no pokemon to catch.');
+                            }
                         }
                         else {
                             self.doLoop = true;
+                            if (process.env.NODE_ENV == 'development')
+                                console.log('loop continued with no pokemon to catch.');
                         }
                     }
 
@@ -637,13 +741,39 @@ var PokeGoWorker = function () {
                     self.logger.info('[o] Heartbeat done.');
                     // resolve();
                 }).catch(err => {
-                    self.logger.error(err);
+                    self.verifyErrorRestart(err);
                 });
             }
             else {
                 resolve();
             }
         });
+    }
+
+    // restart the bot
+    self.verifyErrorRestart = function (err) {
+         if (err instanceof Error && err.name == 'StopError' && err.message == 'Status code 102 received from RPC') {
+            // restart this bot
+            self.restart();
+            return true;
+        }
+        else {
+            self.logger.error(err);
+            return false;
+        }
+    }
+
+    self.restart = function () {
+        if (!self.restarting) {
+            self.restarting = true;
+            clearInterval(self.loopInterval);
+            self.logger.info('[x] Token expired. Slave halted. Scheduling restart...');
+            setTimeout(() => {
+                self.logger.info('[o] Initiating restart...');
+                self.start();
+                self.restarting = false;
+            }, 300000);
+        }
     }
 
     // start the bot
@@ -687,6 +817,8 @@ var PokeGoWorker = function () {
                 self.heartbeat();
             }, Settings.loopInterval);
             return null;
+        }).catch(err => {
+            self.verifyErrorRestart(err);
         });
     }
 }
