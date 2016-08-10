@@ -552,8 +552,7 @@ var PokeGoWorker = function () {
             var location = {
                     latitude: nextStep.latitude,
                     longitude: nextStep.longitude
-                }
-            };
+                };
             self.client.setPosition(location.latitude, location.longitude);
             self.character.location = location;
             self.logger.info('[m] Move to ' + location.latitude + ', ' + location.longitude);
