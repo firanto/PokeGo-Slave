@@ -136,7 +136,7 @@
         }
         
         #nearby-panel-tab {
-            width: 140px;
+            width: 100px;
             height: 20px;
             left: 0px;
             bottom: 130px;
@@ -266,6 +266,21 @@
                 </div>
                 <div role="tabpanel" class="tab-pane fade" id="pokemons">
                     <div style="height: 30px; line-height: 30px;">Pokemons: <span data-bind="text: pokemons().length"></span>/<span data-bind="text: pokeStorage"></span></div>
+                    <form class="form-inline text-center">
+                        <span>Sort by: </span>
+                        <div class="form-group">
+                            <input type="radio" class="" name="pokemon-sort" id="pokemon-sort-number" checked="checked">
+                            <label for="exampleInputName2">#</label>
+                        </div>
+                        <div class="form-group" style="margin-left: 30px;">
+                            <input type="radio" class="" name="pokemon-sort" id="pokemon-sort-name">
+                            <label for="exampleInputName2">Name</label>
+                        </div>
+                        <div class="form-group" style="margin-left: 30px;">
+                            <input type="radio" class="" name="pokemon-sort" id="pokemon-sort-cp">
+                            <label for="exampleInputName2">CP</label>
+                        </div>
+                    </form>
                     <table class="table table-condensed table-striped">
                         <tbody class="table-bordered" data-bind="foreach: pokemons">
                             <tr>
@@ -315,7 +330,7 @@
     </div>
 
     <!-- nearby pokemons -->
-    <div id="nearby-panel-tab">Nearby Pokemons</div>
+    <div id="nearby-panel-tab">Sightings</div>
     <div id="nearby-panel">
         <ul data-bind="foreach: nearbyPokemons">
             <li>
@@ -486,12 +501,9 @@
                     }
                 });
             });
-            var pokemonsSorted = data.character.pokemons;
-            pokemonsSorted.sort(function(a, b) {
-                return b.cp - a.cp;
-            });
 
-            bindedData.pokemons(pokemonsSorted);
+            // sort pokemons based on selection
+            sortPokemons(data.character.pokemons);
             // add defending icon
             data.character.eggs.forEach(egg => {
                 egg.incubatedIcon = ko.computed(() => {
@@ -747,6 +759,25 @@
         }
     }
 
+    function sortPokemons(pokemons) {
+        if ($('#pokemon-sort-number').is(':checked')) {
+            pokemons.sort(function(a, b) {
+                return a.pokemon_id - b.pokemon_id || b.cp - a.cp;
+            });
+        }
+        else if ($('#pokemon-sort-name').is(':checked')) {
+            pokemons.sort(function(a, b) {
+                return a.data.name.toLowerCase().localeCompare(b.data.name.toLowerCase());
+            });
+        }
+        else if ($('#pokemon-sort-cp').is(':checked')) {
+            pokemons.sort(function(a, b) {
+                return b.cp - a.cp;
+            });
+        }
+        bindedData.pokemons(pokemons);
+    }
+
     $(document).ready(function() {
         // initialize progress modal dialog
         $('#collected-modal').modal({ backdrop: true, keyboard: true, show: false });
@@ -762,6 +793,11 @@
 
         // init knockout
         ko.applyBindings(bindedData);
+
+        // add pokemon short event handler
+        $('#pokemon-sort-number').click(function () { sortPokemons(bindedData.pokemons()); });
+        $('#pokemon-sort-name').click(function () { sortPokemons(bindedData.pokemons()); });
+        $('#pokemon-sort-cp').click(function () { sortPokemons(bindedData.pokemons()); });
     });
 </script>
 

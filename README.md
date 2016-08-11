@@ -56,6 +56,7 @@ That's it. :3
 - [X] Pokemon automatic transfer (user can limit number of possession. Pokemon with lowest CP will be transfered first)
 - [X] Pokemon catch filter. Can be 'all', 'except', or 'only'
 - [X] Incubate eggs
+- [X] Sort owned pokemons based on # on pokedex, name, or CP.
 - [ ] Enable/disable auto-walk from UI
 - [ ] Double click map to set trainer location.
 - [ ] Drop items when bag is full. I think this should be done manually from UI.
@@ -71,13 +72,17 @@ Regarding s2geometry-node issue (specially in Windows), just make sure you have 
 If your still have error on building it, try update your npm with 'npm install -g npm@next' with Administrator credentials.
 
 # Dependency
-This poject use API which can be found [here](https://github.com/cyraxx/pogobuf)
-The API has dependency to [node-pogo-signature](https://github.com/SpencerSharkey/node-pogo-signature).
+This poject use API which can be found [here](https://github.com/cyraxx/pogobuf).
+
+The API has a dependency to [node-pogo-signature](https://github.com/SpencerSharkey/node-pogo-signature).
 
 ### Thanks to:
 [cyraxx](https://github.com/cyraxx) who develop the pogobuf.
+
 [Spencer](https://github.com/SpencerSharkey) who provide the dependency for u6 signature.
+
 Chris who transpile the signature from native c to javascript.
+
 Everyone at pkmngodev who provide the base api.
 
 And thanks to [Arm4x](https://github.com/Armax) who provide the node's verison of pokemon go api for me to learn how the API work which you can found [here](https://github.com/Armax/Pokemon-GO-node-api).
