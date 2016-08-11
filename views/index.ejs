@@ -486,7 +486,12 @@
                     }
                 });
             });
-            bindedData.pokemons(data.character.pokemons);
+            var pokemonsSorted = data.character.pokemons;
+            pokemonsSorted.sort(function(a, b) {
+                return b.cp - a.cp;
+            });
+
+            bindedData.pokemons(pokemonsSorted);
             // add defending icon
             data.character.eggs.forEach(egg => {
                 egg.incubatedIcon = ko.computed(() => {
