@@ -17,6 +17,17 @@ const ItemList = JSON.parse(fs.readFileSync(__dirname + '/items.json', 'utf8'));
 // settings must be var because we inject second layer setting item on the fly
 var Settings = JSON.parse(fs.readFileSync(__dirname + '/settings.json', 'utf8'));
 
+// create folder [root]/logs if does not exist 
+var dir = 'logs';
+fs.mkdir(dir, 0o755, function(err) {
+    if (err) {
+        if (err != null && err.code != 'EEXIST') {
+            console.log('Cannot create logs directory.');
+            console.log(err);
+        }
+    }
+});
+// configure logger
 log4js.configure({ appenders: [ { type: 'console' }, { type: 'file', filename: 'logs/log ' + dateFormat(new Date(), "yyyy-mm-dd h-MM-ss") + '.log', category: 'PokeGoSlave' } ]});
 
 // Extend Number object with method to convert radians to numeric (signed) degrees 
@@ -235,11 +246,6 @@ var PokeGoWorker = function () {
                 // set total items count
                 self.character.totalItems = itemCount;
                 
-                // sort pokemons
-                self.character.pokemons.sort((a, b) => {
-                    return a.pokemon_id - b.pokemon_id || b.cp - a.cp;
-                });
-
                 // sort eggs
                 self.character.eggs.sort((a, b) => {
                     return a.egg_km_walked_target - b.egg_km_walked_target || a.id - b.id;
