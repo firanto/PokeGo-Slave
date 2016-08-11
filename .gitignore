@@ -29,3 +29,6 @@ node_modules
 # MacOS folders
 .DS_Store
 
+# Intellij project settings
+.idea/
+
